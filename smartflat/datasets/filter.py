@@ -1,20 +1,26 @@
-"""Filters used to sample subsets of datasets  DEPRECATED TODO """
+"""Filters used to sample subsets of the Smartflat dataset."""
+
 import os
-import sys
+import warnings
 
 import numpy as np
 import pandas as pd
-from IPython.display import display
 
-from IPython.display import display
-
-from smartflat.constants import mapping_participant_id_fix, tasks_duration_lims
-from smartflat.utils.utils_coding import *
+from smartflat.constants import tasks_duration_lims
+from smartflat.utils.utils_coding import display_safe, yellow
 
 
 def define_cohort(metadata, scenario):
     """Define a subset of the dataset based on a scenario.
+
+    .. deprecated::
+        Use dataset class methods (e.g. ``SmartflatDataset.define_cohort``) instead.
     """
+    warnings.warn(
+        "define_cohort() is deprecated — use dataset class methods instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     
     # Filters the videos that have been processed
     if scenario == 'all' or scenario is None:
@@ -131,7 +137,7 @@ def apply_gold_data_filtering(df_video, process=False, verbose=True):
                 f"Filtered {initial_count - final_count}/{initial_count} ({100*(initial_count - final_count)/initial_count:.2f}%) videos"
                 f" residuals partitions rows (no merged_video while n_partitions>1)."
             )
-        display(
+        display_safe(
             df_video[
                 (df_video["n_identifiers_per_mod"] == 1)
                 & (df_video["is_consolidated"] == 0)
@@ -170,7 +176,7 @@ def apply_gold_data_filtering(df_video, process=False, verbose=True):
         yellow(
             f"Note: there are {missing_fps_count} missing fps values after merging with fps_percy:"
         )
-        display(df_video[(df_video['fps'].isna()) & (df_video['video_path'].notna()) ][['identifier', 'fps', 'video_path']])
+        display_safe(df_video[(df_video['fps'].isna()) & (df_video['video_path'].notna()) ][['identifier', 'fps', 'video_path']])
         
     elif verbose:
         print("All fps values are present after merging with fps_percy.")
@@ -279,7 +285,7 @@ def filter_outlier_video_names(df, process=True, verbose=True):
             f" with non-standard video name."
         )
         if len(idf) > 0:
-            display(idf[["participant_id", "modality", "video_name"]])
+            display_safe(idf[["participant_id", "modality", "video_name"]])
     if process:
         df = df[df["is_outlier"] == 0].copy()
     # df.drop(columns=['is_recording_video', 'is_tobii_output'], inplace=True)
