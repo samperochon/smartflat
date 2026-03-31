@@ -53,7 +53,12 @@ class BaseSmartflatConfig(BaseConfig):
     # --------- Change-point detection estimation --------
     #change_point_experiment_ids = ['Tobii_lambda_1', 'Tobii_lambda_2']
 
-    join_len: int = .5  # [duration in seconds] 
+    join_len: int = .5  # [duration in seconds]
 
-
-
+    # --------- Model identifiers ---------
+    video_model_name: str = "vit_giant_patch14_224"
+    speech_recognition_model_name: str = "whisperx"
+    speech_embedding_model_name: str = "multilingual-e5-large"
+    hand_landmarks_model_name: str = "hand_landmarks_mediapipe"
+    skeleton_landmarks_model_name: str = "skeleton_landmarks_mediapipe"
+    tracking_hand_landmarks_model_name: str = "tracking_hand_landmarks_v1"

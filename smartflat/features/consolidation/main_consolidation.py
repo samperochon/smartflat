@@ -18,7 +18,7 @@ from smartflat.constants import (
     mapping_participant_id_fix,
     video_extensions,
 )
-from smartflat.datasets.build import apply_manual_fixes
+from smartflat.datasets.corrections import apply_manual_fixes
 from smartflat.datasets.filter import filter_outlier_video_names
 from smartflat.features.consolidation.main_snapshot import main as main_snapshot
 from smartflat.utils.utils_io import get_data_root

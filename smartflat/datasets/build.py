@@ -1,31 +1,19 @@
-import ast
+"""Video metadata builder for the Smartflat dataset."""
+
 import datetime
 import os
-import socket
-import sys
-from copy import deepcopy
+import warnings
 from glob import glob
-from time import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from IPython.display import display
-
-# add tools path and import our own tools
-
 
 from smartflat.annotation_smartflat import AnnotationSmartflat
 from smartflat.constants import (
     available_modality,
     available_output_type,
-    available_tasks,
     exluded_administrations,
-    incomplete_barycenter_administrations,
-    incomplete_clinical_administrations,
     mapping_incorrect_modality_name,
-    tasks_duration_lims,
 )
 from smartflat.datasets.filter import apply_gold_data_filtering, filter_outlier_video_names
 from smartflat.datasets.quality_control import (
@@ -40,42 +28,115 @@ from smartflat.datasets.utils import (
     append_video_metadata,
     use_light_dataset,
 )
-from smartflat.utils.utils import check_and_convert
-from smartflat.utils.utils_coding import *
-from smartflat.utils.utils_dataset import train_test_val_split_by
+from smartflat.utils.utils_coding import display_safe, green, red, yellow
 from smartflat.utils.utils_io import (
     check_video,
-    fetch_flag_path,
     fetch_output_path,
     get_data_root,
     get_file_size_in_gb,
-    get_video_loader,
-    parse_dir_name,
     parse_flag,
     parse_participant_id,
     parse_path,
     parse_task_number,
 )
 
-import warnings
+from smartflat.configs.smartflat_config import BaseSmartflatConfig
+from smartflat.datasets.corrections import apply_manual_fixes  # noqa: F401 (re-export)
 
-warnings.filterwarnings(
-    "ignore",
-    category=FutureWarning,
-    # message=".*object-dtype columns with all-bool values.*"
-)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+_config = BaseSmartflatConfig()
+
+_VIDEO_EXTENSIONS = [".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".mpg", ".mpeg"]
 
 
+def _discover_artifacts(root_folder, task_names, modality_to_explore):
+    """Scan the data directory and collect all video artifacts into a DataFrame.
 
-# TODO: set as config arguments
+    Iterates over tasks / participants / modalities, collecting video files and
+    their associated feature outputs (representations, speech, hands, skeleton).
+    """
+    rows = []
 
-video_model_name = "vit_giant_patch14_224"
-speech_recognition_model_name = "whisperx"
-speech_embedding_model_name = "multilingual-e5-large"
-hand_landmarks_model_name = "hand_landmarks_mediapipe"
-skeleton_landmarks_model_name = "skeleton_landmarks_mediapipe"
-tracking_hand_landmarks_model_name = 'tracking_hand_landmarks_v1'
-# Dataset main builder
+    for task in task_names:
+        sbj_folders = glob(os.path.join(root_folder, task, "*"))
+        print(f"Exploring {task} with {len(sbj_folders)} participants.")
+
+        for sbj_folder in sbj_folders:
+            participant_id = os.path.basename(sbj_folder)
+
+            for modality in modality_to_explore:
+                videos_dict = {}
+
+                # Videos
+                video_paths = glob(
+                    os.path.join(root_folder, task, sbj_folder, modality, "*")
+                )
+                video_paths = [
+                    p for p in video_paths
+                    if (
+                        any(p.lower().endswith(ext) for ext in _VIDEO_EXTENSIONS)
+                        and "hand_landmarks" not in p
+                        and "skeleton_landmarks_plot" not in p
+                    )
+                ]
+                videos_dict = collect_videos(video_paths, videos_dict)
+
+                # Video representations (VideoMAE-v2)
+                video_representation_paths = glob(os.path.join(
+                    root_folder, task, participant_id, modality,
+                    "video_representations*.npy",
+                ))
+                videos_dict = collect_video_representations(
+                    video_representation_paths, videos_dict
+                )
+
+                # Speech recognition (WhisperX)
+                speech_recognition_paths = glob(os.path.join(
+                    root_folder, task, participant_id, modality,
+                    "speech_recognition*.json",
+                ))
+                videos_dict = collect_speech_recognition(
+                    speech_recognition_paths, videos_dict
+                )
+
+                # Speech representations (e5-large)
+                speech_representations_paths = glob(os.path.join(
+                    root_folder, task, participant_id, modality,
+                    "speech_representations*.npy",
+                ))
+                videos_dict = collect_speech_representations(
+                    speech_representations_paths, videos_dict
+                )
+
+                # Hand landmarks (MediaPipe)
+                hand_landmarks_paths = glob(os.path.join(
+                    root_folder, task, participant_id, modality,
+                    "hand_landmarks*.json",
+                ))
+                videos_dict = collect_hand_estimation(hand_landmarks_paths, videos_dict)
+
+                # Skeleton landmarks (MediaPipe)
+                skeleton_landmarks_paths = glob(os.path.join(
+                    root_folder, task, participant_id, modality,
+                    "skeleton_landmarks*.json",
+                ))
+                videos_dict = collect_skeleton_estimation(skeleton_landmarks_paths, videos_dict)
+
+                # Tracked hand landmarks
+                tracking_hand_landmarks_paths = glob(os.path.join(
+                    root_folder, task, participant_id, modality,
+                    "tracking_hand_landmarks*.json",
+                ))
+                videos_dict = collect_hand_processing(tracking_hand_landmarks_paths, videos_dict)
+
+                for _video_name, video_dict in videos_dict.items():
+                    rows.append(video_dict)
+
+    df_video = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["video_path"])
+    print(f'Number of unique participant_id: {df_video.participant_id.nunique() if len(df_video) else 0}')
+    return df_video
+
 
 def generate_video_metadata(
     root_folder,
@@ -105,174 +166,33 @@ def generate_video_metadata(
     - The passation_id etc comes after filtering and sources-related additions.
 
     """
-    _video_extensions = [
-        ".mp4",
-        ".avi",
-        ".mkv",
-        ".mov",
-        ".wmv",
-        ".flv",
-        ".mpg",
-        ".mpeg",
-    ]
-    
-    # 1) Initialization
-
     if verbose:
         yellow("Entering generate_video_metadata")
 
     if root_folder is None:
         root_folder = get_data_root()
-        
-        
 
-    # 0 - FIX: Since the quality control only change the identifiers (task_name and mostly modalities) 
-    # after dataset exploration, we instead explore all tasks ans mnodality and filter after the QC is applied
-    # This is sub-optimal but okay for the size and teh content of the dataset :-). 
-    desired_task_name = task_names; task_name = available_tasks
-    desired_modality = modality_to_explore; modality_to_explore = available_modality
-    
-    modality_to_explore = modality_to_explore + [
+    # QC needs all tasks/modalities to swap e.g. GoPros, so we discover everything
+    # and filter to the desired subset after QC is applied.
+    desired_task_name = task_names
+    desired_modality = modality_to_explore
+    modality_to_explore = available_modality + [
         k
         for k, m in mapping_incorrect_modality_name.items()
-        if (m in modality_to_explore and not (k.lower() == m.lower()))
+        if m in modality_to_explore and k.lower() != m.lower()
     ]
-    # For gold criteria
-    do_filter = 'refill' not in root_folder 
+
+    do_filter = 'refill' not in root_folder
     if verbose:
         yellow(f"Filter gold dataset (unexpected video name and gold-filtering): {do_filter}")
 
-    if parse_video:
+    # 1) Discover all video artifacts across tasks/participants/modalities
+    df_video = _discover_artifacts(root_folder, task_names, modality_to_explore)
 
-        video_loader = get_video_loader()
-
-    df_video = pd.DataFrame(columns=["video_path"])
-    # 2) Loop over all the task and subject folders
-    for task in task_names:
-
-        sbj_folders = glob(os.path.join(root_folder, task, "*"))
-        print(f"Exploring {task} with {len(sbj_folders)} participants.")
-        print(root_folder, task)
-        for sbj_folder in sbj_folders:
-
-            participant_id = os.path.basename(sbj_folder)
-
-            # TODO TBC To be continued
-            # task_num, diag_num, trigram, date = parse_id(os.path.basename(sbj_folder))
-            # os.makedirs(os.path.join(output_folder, task, participant_id), exist_ok=True)
-
-            for modality in modality_to_explore:
-
-                # 3) Explore content, videos_dict is the main dictionnary that will be used to populate the dataframe, keyed by video_name and storing attributes
-                videos_dict = {}
-
-                # Videos
-                video_paths = glob(
-                    os.path.join(root_folder, task, sbj_folder, modality, "*")
-                )
-                video_paths = [
-                    p
-                    for p in video_paths
-                    if (
-                        any(p.lower().endswith(ext) for ext in _video_extensions)
-                        and not "hand_landmarks" in p
-                        and not "skeleton_landmarks_plot" in p
-                    )
-                ]
-                videos_dict = collect_videos(video_paths, videos_dict)
-
-                # Video embedding from Video Foundation Modal
-                video_representation_paths = glob(
-                    os.path.join(
-                        root_folder,
-                        task,
-                        participant_id,
-                        modality,
-                        "video_representations*.npy",
-                    )
-                )
-                videos_dict = collect_video_representations(
-                    video_representation_paths, videos_dict
-                )
-
-                # Speech recognition
-                speech_recognition_paths = glob(
-                    os.path.join(
-                        root_folder,
-                        task,
-                        participant_id,
-                        modality,
-                        "speech_recognition*.json",
-                    )
-                )
-                videos_dict = collect_speech_recognition(
-                    speech_recognition_paths, videos_dict
-                )
-
-                # Speech recognition
-                speech_representations_paths = glob(
-                    os.path.join(
-                        root_folder,
-                        task,
-                        participant_id,
-                        modality,
-                        "speech_representations*.npy",
-                    )
-                )
-                videos_dict = collect_speech_representations(
-                    speech_representations_paths, videos_dict
-                )
-
-                # Hand landmarks estimation
-                hand_landmarks_paths = glob(
-                    os.path.join(
-                        root_folder,
-                        task,
-                        participant_id,
-                        modality,
-                        "hand_landmarks*.json",
-                    )
-                )
-                videos_dict = collect_hand_estimation(hand_landmarks_paths, videos_dict)
-
-                # Skeleton landmarks estimation
-                skeleton_landmarks_paths = glob(os.path.join(root_folder, task, participant_id, modality, 'skeleton_landmarks*.json'))
-                videos_dict = collect_skeleton_estimation(skeleton_landmarks_paths, videos_dict)
-
-                # Hand landmarks processing
-                tracking_hand_landmarks_paths = glob(os.path.join(root_folder, task, participant_id, modality, 'tracking_hand_landmarks*.json'))
-                videos_dict = collect_hand_processing(tracking_hand_landmarks_paths, videos_dict)
-
-                # Annotations
-                # annotation_paths = list(glob(os.path.join(root_folder, task, participant_id, 'Annotation', '*.json'))) + list(glob(os.path.join(root_folder, task, participant_id, 'Annotation', '*.boris')))
-                # videos_dict = collect_annotations(annotation_paths, videos_dict)
-
-                # Blur motion estimation
-                # blur_estimation_paths = glob(os.path.join(output_folder, task, participant_id, modality, '*_blur_estimation.npy'))
-                # for blur_estimation_path in blur_estimation_paths:
-
-                #     video_name = os.path.basename(blur_estimation_path).split('_blur_estimation')[0]
-
-                #     if video_name in videos_dict.keys():
-                #         continue
-                #     else:
-                #         videos_dict[video_name] = init_videos_dict(task, participant_id, modality, output_dir, video_name, penalty)
-
-                # Look for video_name that could be a 'merged_*' #TODO Handle merged video. exclude them for now.
-                # if 'merged' in videos_dict.keys():
-                #    videos_dict = {video_name: video_dict for video_name, video_dict in videos_dict.items() if video_name != 'merged'}
-
-                for video_name, video_dict in videos_dict.items():
-                    df_video = pd.concat(
-                        [df_video, pd.DataFrame([video_dict])], ignore_index=True
-                    )
-    #print('Is it found ? ', df_video[df_video['participant_id'].apply(lambda x: x == 'G161_AMEAmo_SDS2_P_14062024_ M24_V3_gateau')].video_path.to_list())
-    print(f'Number of unique participant_id: {df_video.participant_id.nunique()}')
-    
     if len(df_video) == 0:
         raise ValueError(
             f"No tasks/participant folder were found in {root_folder}.")
-        
+
     df_video['folder_modality'] = df_video.modality
     
     # 2.1) Look for light versions in present
@@ -725,19 +645,19 @@ def collect_annotations(annotation_paths, videos_dict):
 
 def create_features_metadata(video_path):
     # Collect metadata
-    video_representation_path = fetch_output_path(video_path, video_model_name)
+    video_representation_path = fetch_output_path(video_path, _config.video_model_name)
     speech_recognition_path = fetch_output_path(
-        video_path, speech_recognition_model_name
+        video_path, _config.speech_recognition_model_name
     )
     speech_representation_path = fetch_output_path(
-        video_path, speech_embedding_model_name
+        video_path, _config.speech_embedding_model_name
     )
-    hand_landmarks_path = fetch_output_path(video_path, hand_landmarks_model_name)
+    hand_landmarks_path = fetch_output_path(video_path, _config.hand_landmarks_model_name)
     skeleton_landmarks_path = fetch_output_path(
-        video_path, skeleton_landmarks_model_name
+        video_path, _config.skeleton_landmarks_model_name
     )
     tracking_hand_landmarks_path = fetch_output_path(
-        video_path, tracking_hand_landmarks_model_name
+        video_path, _config.tracking_hand_landmarks_model_name
     )
 
     return {  # Video embedding from Video Foundation Model
@@ -818,7 +738,7 @@ def parse_flags(df_video, verbose=False):
         yellow(
             "Plot flag intermediary state (without accounting for presence of the output)"
         )
-        display(
+        display_safe(
             df_video[[f"flag_{output_type}" for output_type in available_output_type]]
             .apply(pd.Series.value_counts)
             .fillna(0)
@@ -843,7 +763,7 @@ def parse_flags(df_video, verbose=False):
 
     if verbose:
         yellow("Plot flag final state")
-        display(
+        display_safe(
             df_video[[f"flag_{output_type}" for output_type in available_output_type]]
             .apply(pd.Series.value_counts)
             .fillna(0)
@@ -859,205 +779,3 @@ def parse_flags(df_video, verbose=False):
     # df_video['flag_speech_representation'] = df_video.apply(lambda x: x.flag_speech_representation if x.modality == x.audio_modality else 'disabled', axis=1)
 
     return df_video
-
-def apply_manual_fixes(metadata):
-
-    # TOFIX
-    metadata.loc[
-        (metadata["participant_id"] == "G83_P70_STOEri_13102021")
-        & (metadata["modality"] == "GoPro1")
-        & (metadata["video_name"] == "STOEri_13102021_G_1"),
-        "video_name",
-    ] = "GOPR0000"
-    metadata.loc[
-        (metadata["participant_id"] == "G83_P70_STOEri_13102021")
-        & (metadata["modality"] == "GoPro1")
-        & (metadata["video_name"] == "STOEri_13102021_G_2"),
-        "video_name",
-    ] = "GOPR0001"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G83_P70_STOEri_13102021")
-        & (metadata["modality"] == "GoPro3")
-        & (metadata["video_name"] == "STOEric_13102021_G_1"),
-        "video_name",
-    ] = "GOPR0000"
-    metadata.loc[
-        (metadata["participant_id"] == "G83_P70_STOEri_13102021")
-        & (metadata["modality"] == "GoPro3")
-        & (metadata["video_name"] == "STOEric_13102021_G_2"),
-        "video_name",
-    ] = "GOPR0001"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G5_C3_FAKAzi_03032017")
-        & (metadata["video_name"].isin(["GP011367", "GOPR1367"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G5_C3_FAKAzi_03032017")
-        & (metadata["video_name"].isin(["GP010223", "GOPR0223"])),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G5_C3_FAKAzi_03032017")
-        & (metadata["video_name"].isin(["GOPR0204", "GP010204"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G16_P7_BERBea_03052017")
-        & (metadata["video_name"] == "GP0108541"),
-        "video_name",
-    ] = "GP010854"
-    metadata.loc[
-        (metadata["participant_id"] == "G16_P7_BERBea_03052017")
-        & (metadata["video_name"].isin(["GOPR1388", "GP021388"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G16_P7_BERBea_03052017")
-        & (metadata["video_name"].isin(["GP020238", "GP010238", "GOPR0238"])),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G16_P7_BERBea_03052017")
-        & (metadata["video_name"].isin(["GOPR0854", "GP010855", "GP010854"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G1_C1_BARMar_22022017")
-        & (metadata["video_name"].isin(["GP010128", "GOPR0128"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G1_C1_BARMar_22022017")
-        & (
-            metadata["video_name"].isin(
-                ["GP020067", "GOPR0067", "GP010067", "GP030067"]
-            )
-        ),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G1_C1_BARMar_22022017")
-        & (metadata["video_name"].isin(["GOPR0166", "GP010166"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G20_C11_BROJos_04072017")
-        & (metadata["video_name"].isin(["GP011409", "GOPR1409"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G20_C11_BROJos_04072017")
-        & (metadata["video_name"].isin(["GOPR0305", "GP010305"])),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G20_C11_BROJos_04072017")
-        & (metadata["video_name"].isin(["GOPR0870", "GP010870"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G8_C6_GANJea_09032017")
-        & (metadata["video_name"].isin(["GOPR1370", "GP011370"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G8_C6_GANJea_09032017")
-        & (metadata["video_name"].isin(["GP010226", "GOPR0226"])),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G8_C6_GANJea_09032017")
-        & (metadata["video_name"].isin(["GOPR0207", "GP010207"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G9_C7_MATEli_14032017")
-        & (metadata["video_name"].isin(["GOPR0208", "GP010208"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G9_C7_MATEli_14032017")
-        & (metadata["video_name"].isin(["GOPR0227", "GP010227"])),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G9_C7_MATEli_14032017")
-        & (metadata["video_name"].isin(["GP011371", "GOPR1371"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G2_P1_LEBAla_23022017")
-        & (metadata["video_name"].isin(["GOPR0098", "GOPR0159"])),
-        "modality",
-    ] = "GoPro1"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G11_P4_SAUJea_21032017")
-        & (metadata["video_name"].isin(["GOPR0210", "GOPR0211", "GP010211"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G11_P4_SAUJea_21032017")
-        & (
-            metadata["video_name"].isin(
-                ["GOPR0230", "GOPR0231", "GP010231", "GP020231"]
-            )
-        ),
-        "modality",
-    ] = "GoPro2"
-    metadata.loc[
-        (metadata["participant_id"] == "G11_P4_SAUJea_21032017")
-        & (metadata["video_name"].isin(["GOPR1374", "GOPR1375", "GP011375"])),
-        "modality",
-    ] = "GoPro3"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G2_P1_LEBAla_23022017")
-        & (metadata["video_name"].isin(["GOPR0098", "GOPR0159"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "G3_C2_FORCla_27022017")
-        & (metadata["video_name"].isin(["GP010168", "GOPR0168"])),
-        "modality",
-    ] = "GoPro1"
-    metadata.loc[
-        (metadata["participant_id"] == "L12_P6_BRUSyl_19012018")
-        & (metadata["video_name"] == "lego"),
-        "modality",
-    ] = "Tobii"
-
-    metadata.loc[
-        (metadata["participant_id"] == "G64_P51_GEOTip_14032019")
-        & (metadata["modality"] == "GoPro2"),
-        "n_videos",
-    ] = 3
-    metadata.loc[
-        (metadata["participant_id"] == "G93_P79_AMEAmo_25052022")
-        & (metadata["modality"] == "GoPro2"),
-        "n_videos",
-    ] = 2
-
-    # Fix unsorted videos at Percy
-    metadata.loc[(metadata['participant_id']== 'G110_P94_ILIMil_17052023') & (metadata['modality'] == 'Tobii'), 'n_videos'] = 1
-    metadata.loc[(metadata['participant_id']== 'G101_C40_MIZCel_02122022') & (metadata['modality'] == 'Tobii'), 'n_videos'] = 1
-    metadata.loc[(metadata['participant_id']== 'G102_P87_AUXCyr_09122022') & (metadata['modality'] == 'Tobii'), 'n_videos'] = 1
-    metadata.loc[(metadata['participant_id']== 'G111_P95_AMEAmo_24052023') & (metadata['modality'] == 'Tobii'), 'n_videos'] = 1
-    metadata.loc[(metadata['participant_id']== 'G141_P117_BAUVin_01122023') & (metadata['modality'] == 'Tobii'), 'n_videos'] = 1
-    metadata.loc[(metadata['participant_id']== 'G25_P14_BRUSyl_18012018') & (metadata['modality'] == 'Tobii'), 'n_videos'] = 2
-    metadata.loc[(metadata['participant_id']== 'G100_P86_BAUVin_25112022') & (metadata['modality'] == 'GoPro2'), 'n_videos'] = 6
-    metadata.loc[(metadata['participant_id']== 'G110_P94_ILIMil_17052023') & (metadata['modality'] == 'GoPro2'), 'n_videos'] = 4
-    
-    metadata.loc[metadata['video_name'] == 'merged_video', 'n_videos'] = 1
-    
-    return metadata
-

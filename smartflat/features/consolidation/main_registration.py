@@ -10,7 +10,7 @@ import pandas as pd
 
 
 from smartflat.constants import mapping_incorrect_modality_name, root_paths, video_extensions
-from smartflat.datasets.build import apply_manual_fixes
+from smartflat.datasets.corrections import apply_manual_fixes
 from smartflat.features.consolidation.main_snapshot import main as main_snapshot
 from smartflat.utils.utils_io import check_video, get_data_root, get_file_size_in_gb
 
