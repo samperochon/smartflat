@@ -11,8 +11,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import umap
-from IPython.display import display
+try:
+    import umap
+except ImportError:
+    umap = None
+
+try:
+    from IPython.display import display
+except ImportError:
+    def display(*args, **kwargs):
+        for a in args:
+            print(a)
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle

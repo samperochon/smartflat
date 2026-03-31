@@ -21,7 +21,13 @@ from sklearn.utils import shuffle
 import random
 
 import matplotlib.pyplot as plt
-from decord import VideoReader, bridge, cpu
+try:
+    from decord import VideoReader, bridge, cpu
+    bridge.set_bridge("native")
+    _decord_available = True
+except ImportError:
+    VideoReader = None
+    _decord_available = False
 
 from smartflat.annotation_smartflat import AnnotationSmartflat
 from smartflat.constants import (
@@ -47,7 +53,6 @@ from smartflat.utils.utils_io import (
     parse_task_number,
 )
 
-bridge.set_bridge('native')
 
 def show_random_frame(video_path):
     vr = VideoReader(video_path, ctx=cpu(0))

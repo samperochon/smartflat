@@ -33,7 +33,10 @@ from smartflat.configs.loader import import_config
 
 # finch_path = '/home/sam/FINCH-Clustering/TW-FINCH/python'
 # sys.path.insert(0, finch_path)
-from smartflat.contrib.twfinch import FINCH
+try:
+    from smartflat.contrib.twfinch import FINCH
+except (ImportError, ModuleNotFoundError):
+    FINCH = None
 from smartflat.models.utils import CostCustom
 from smartflat.utils.utils_coding import *
 from smartflat.utils.utils_dataset import normalize_data

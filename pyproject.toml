@@ -7,7 +7,7 @@ name = "smartflat"
 version = "0.1.0"
 description = "Multimodal video analysis framework for studying activities of daily living in clinical settings (Smartflat/SDS2 project)"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Sam Perochon"},
@@ -15,7 +15,7 @@ authors = [
 
 dependencies = [
     # Core scientific computing
-    "numpy>=1.20",
+    "numpy>=1.20,<2",
     "scipy>=1.5",
     "pandas>=1.1",
     "scikit-learn>=0.23",
@@ -25,8 +25,7 @@ dependencies = [
     "torchmetrics>=0.11",
     "timm>=0.4.12",
 
-    # Video processing
-    "decord>=0.6",
+    # Video processing (decord requires source build on macOS — see optional deps)
     "opencv-python>=3.4",
     "Pillow>=9.0",
 
@@ -42,8 +41,9 @@ dependencies = [
     # Optimal transport (for Wasserstein distances)
     "POT",
 
-    # Notebook support
+    # Notebook / interactive support
     "nbformat>=5.0",
+    "ipython>=8.0",
 
     # Configuration & utilities
     "simple_colors",
@@ -51,6 +51,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Video decoding (requires source build on macOS: pip install decord)
+video = [
+    "decord>=0.6",
+]
 # Audio/speech processing
 audio = [
     "librosa>=0.8",
@@ -80,7 +84,7 @@ web = [
 ]
 # All optional dependencies
 all = [
-    "smartflat[audio,pose,clustering,stats,annotation,web]",
+    "smartflat[video,audio,pose,clustering,stats,annotation,web]",
 ]
 # Development tools
 dev = [

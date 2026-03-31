@@ -1,3 +1,9 @@
+"""I/O utilities: video operations, data collection/distribution, HPC assignment.
+
+Path resolution and parsing functions have been moved to smartflat.utils.utils_paths.
+They are re-exported here for backward compatibility.
+"""
+
 import datetime
 import logging
 import os
@@ -5,28 +11,34 @@ import pickle
 import socket
 import subprocess
 from glob import glob
-from typing import Any
 
-# TODO: weird that the three are imported only for assign_computation, maybe change the location...
 import numpy as np
 import pandas as pd
-from decord import VideoReader, bridge, cpu
-from IPython.display import display
 from joblib import dump, load
 
 try:
-    from petrel_client.client import Client
+    from decord import VideoReader, bridge, cpu
+    bridge.set_bridge("torch")
+    decord_available = True
+except ImportError:
+    decord_available = False
 
+try:
+    from IPython.display import display
+except ImportError:
+    def display(*args, **kwargs):
+        for a in args:
+            print(a)
+
+try:
+    from petrel_client.client import Client
     petrel_backend_imported = True
 except (ImportError, ModuleNotFoundError):
     petrel_backend_imported = False
-bridge.set_bridge("torch")
-
 
 from smartflat.configs.loader import get_complete_configs, import_config
 from smartflat.constants import (
     AVAILABLE_ROUND_NUMBERS,
-    LOCAL_MACHINE_NAMES,
     available_modality,
     available_tasks,
     enabled_modalities,
@@ -35,6 +47,30 @@ from smartflat.constants import (
     ordered_cluster_types,
 )
 from smartflat.utils.utils_coding import *
+
+# Re-export path functions for backward compatibility
+from smartflat.utils.utils_paths import (  # noqa: F401
+    LOCAL_MACHINE_NAMES,
+    check_exist,
+    fetch_flag_path,
+    fetch_has_gaze,
+    fetch_output_path,
+    fetch_path,
+    fetch_root_dir,
+    get_api_root,
+    get_data_root,
+    get_file_size_in_gb,
+    get_free_space,
+    get_gold_data_path,
+    get_host_name,
+    get_light_data_path,
+    parse_dir_name,
+    parse_flag,
+    parse_identifier,
+    parse_participant_id,
+    parse_path,
+    parse_task_number,
+)
 
 
 def get_data_root(machine_name=None, local=False):

@@ -1,7 +1,9 @@
-"""Utility function used for development
+"""Utility functions used for development.
 
 Sam Perochon @ sam.perochon@ens-paris-saclay.fr January, 2024.
 """
+
+import logging
 
 import matplotlib.pyplot as plt
 from simple_colors import blue as _blue
@@ -10,7 +12,29 @@ from simple_colors import magenta as _magenta
 from simple_colors import red as _red
 from simple_colors import yellow as _yellow
 
-# Utiliser HTML pour mettre en gras le texte
+
+def get_logger(name: str) -> logging.Logger:
+    """Return a configured logger for the given module name."""
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
+            datefmt='%H:%M:%S',
+        ))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    return logger
+
+
+def display_safe(*args, **kwargs):
+    """IPython display with print fallback for non-interactive environments."""
+    try:
+        from IPython.display import display
+        display(*args, **kwargs)
+    except (ImportError, NameError):
+        for a in args:
+            print(a)
 
 
 def red(s):
