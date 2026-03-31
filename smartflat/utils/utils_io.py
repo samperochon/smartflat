@@ -72,6 +72,16 @@ from smartflat.utils.utils_paths import (  # noqa: F401
     parse_task_number,
 )
 
+# Re-export video functions for backward compatibility
+from smartflat.utils.utils_video import (  # noqa: F401
+    check_video,
+    extract_audio,
+    extract_audio_files,
+    get_video_loader,
+    load_pca,
+    parse_video_metadata,
+)
+
 
 def get_data_root(machine_name=None, local=False):
 

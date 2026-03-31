@@ -24,6 +24,7 @@ logger = get_logger(__name__)
 
 # Host names recognized as local development machines
 LOCAL_MACHINE_NAMES = [
+    # Current machines
     "sjp49.borelli.ens-paris-saclay.fr",
     "sjp49.home",
     "sjp49.local",
@@ -32,6 +33,24 @@ LOCAL_MACHINE_NAMES = [
     "macbook-pro-de-sam.local",
     "MacBook-Pro-de-SAM.local",
     "MacBook-Pro-de-Sam.local",
+    # Legacy hostnames (kept for backward compat with older data paths)
+    "Mac.lan",
+    "egr-sjp49-mbp.local",
+    "egr-sjp49-mbp.home",
+    "egr-sjp49-mbp.home.dhe.duke.edu",
+    "egr-sjp49-mbp-1.home",
+    "egr-sjp49-mbp-1.home.dhe.duke.edu",
+    "device-58.home.dhe.duke.edu",
+    "device-57.home.dhe.duke.edu",
+    "device-3026.home",
+    "device-3026.home.dhe.duke.edu",
+    "3C-06-30-12-07-86",
+    "MacOS-Sam-Perochon",
+    "MacBook-Pro.local",
+    "pclnrs119.biomedicale.univ-paris5.fr.dhe.duke.edu",
+    "pclnrs103.biomedicale.univ-paris5.fr.dhe.duke.edu",
+    "pclnrs219.biomedicale.univ-paris5.fr.dhe.duke.edu",
+    "w-155-132.wfer.ens-paris-saclay.fr.dhe.duke.edu",
 ]
 
 

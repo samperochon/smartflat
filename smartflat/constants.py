@@ -243,25 +243,8 @@ smartflat_features = [
 ]
 
 
-LOCAL_MACHINE_NAMES = [ 
-        "Mac.lan",
-        "egr-sjp49-mbp.local",
-        'device-58.home.dhe.duke.edu',
-        'device-57.home.dhe.duke.edu',
-        'pclnrs119.biomedicale.univ-paris5.fr.dhe.duke.edu', 
-        "device-3026.home",
-        'egr-sjp49-mbp-1.home',
-        'egr-sjp49-mbp-1.home.dhe.duke.edu',
-        "egr-sjp49-mbp.home.dhe.duke.edu",
-        "3C-06-30-12-07-86",
-        'device-3026.home.dhe.duke.edu',
-        "egr-sjp49-mbp.home",
-        "MacOS-Sam-Perochon",
-        'pclnrs103.biomedicale.univ-paris5.fr.dhe.duke.edu',
-        'w-155-132.wfer.ens-paris-saclay.fr.dhe.duke.edu',
-        'MacBook-Pro.local',
-        'pclnrs219.biomedicale.univ-paris5.fr.dhe.duke.edu'
-    ]
+# Canonical definition is in utils_paths; re-exported here for backward compatibility
+from smartflat.utils.utils_paths import LOCAL_MACHINE_NAMES  # noqa: F401, E402
 
 enabled_modalities = {'cuisine': {'flag_video_representation': ['GoPro1', 'GoPro2', 'GoPro3', 'Tobii'],
                                 'flag_speech_recognition': ['GoPro1', 'GoPro2', 'GoPro3'],
