@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartflat"
+version = "0.1.0"
+description = "Multimodal video analysis framework for studying activities of daily living in clinical settings (Smartflat/SDS2 project)"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+    {name = "Sam Perochon"},
+]
+
+dependencies = [
+    # Core scientific computing
+    "numpy>=1.20",
+    "scipy>=1.5",
+    "pandas>=1.1",
+    "scikit-learn>=0.23",
+
+    # Deep learning
+    "torch>=1.13",
+    "torchmetrics>=0.11",
+    "timm>=0.4.12",
+
+    # Video processing
+    "decord>=0.6",
+    "opencv-python>=3.4",
+    "Pillow>=9.0",
+
+    # Change point detection
+    "ruptures>=1.1",
+
+    # Visualization
+    "matplotlib>=3.4",
+    "seaborn>=0.12",
+    "plotly>=5.0",
+    "tqdm>=4.60",
+
+    # Optimal transport (for Wasserstein distances)
+    "POT",
+
+    # Notebook support
+    "nbformat>=5.0",
+
+    # Configuration & utilities
+    "simple_colors",
+    "jinja2>=3.0",
+]
+
+[project.optional-dependencies]
+# Audio/speech processing
+audio = [
+    "librosa>=0.8",
+]
+# Hand/skeleton landmark detection
+pose = [
+    "mediapipe>=0.9",
+]
+# Co-clustering analysis
+clustering = [
+    "coclust",
+    "lempel_ziv_complexity",
+    "pyentrp",
+]
+# Statistical analysis
+stats = [
+    "pingouin>=0.4",
+]
+# Annotation tools
+annotation = [
+    "pigeon-jupyter",
+]
+# Web visualization
+web = [
+    "flask>=2.1",
+    "jupyter_dash",
+]
+# All optional dependencies
+all = [
+    "smartflat[audio,pose,clustering,stats,annotation,web]",
+]
+# Development tools
+dev = [
+    "pytest>=7.0",
+    "nbstripout",
+    "pre-commit",
+]
+
+[tool.setuptools.packages.find]
+include = ["smartflat*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
