@@ -7,11 +7,11 @@ Usage: python -m smartflat.features.consolidation.main_synchronisation
 """
 
 import argparse
+import datetime
 import os
 import sys
 from itertools import combinations
 
-import librosa
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -24,16 +24,24 @@ from smartflat.features.consolidation.main_snapshot import main as main_snapshot
 from smartflat.utils.utils_io import extract_audio, get_data_root
 
 
-def main(root_dir=None, verbose=False):
+def main(root_dir=None, verbose=False, run_id=None):
     """From a data directory, compute all possible modality-level synchronisation, run checks, and save results.
-    
-    TODO: We could remove filtering on the merged_video to allow for multiple tests on each modality (using all videos partiitons)."""
-        
+
+    Parameters
+    ----------
+    run_id : str, optional
+        Identifier used in output file/folder names (default: today's date as DDMMYYYY).
+    """
+    if run_id is None:
+        run_id = datetime.datetime.now().strftime('%d%m%Y')
+
     dset = get_dataset(dataset_name='base', root_dir=root_dir, scenario='present')
     df = dset.metadata.sort_values(['modality'], ascending=True).copy()
-    #df = df[(df['video_name'] == 'merged_video') | (df['n_videos'] == 1)]
 
-    results_save_path = os.path.join(get_data_root(), 'dataframes', 'persistent_metadata', 'cross_correlation_22022025.csv')
+    results_save_path = os.path.join(
+        get_data_root(), 'dataframes', 'persistent_metadata',
+        f'cross_correlation_{run_id}.csv',
+    )
     if os.path.isfile(results_save_path):
         results = pd.read_csv(results_save_path)
     else:
@@ -53,7 +61,7 @@ def main(root_dir=None, verbose=False):
             
         print(f'Starting to syncronize {participant_id}')
         
-        result = synchronize(participant_id, group, result_row, verbose=verbose)
+        result = synchronize(participant_id, group, result_row, verbose=verbose, run_id=run_id)
         results = pd.concat([results, pd.DataFrame(result, index=[0])], ignore_index=True, verify_integrity=False)
         results.to_csv(results_save_path, index=False)
         
@@ -76,7 +84,7 @@ def main(root_dir=None, verbose=False):
     return results
 
     
-def synchronize(participant_id, group_df, result_row=None, verbose=False):
+def synchronize(participant_id, group_df, result_row=None, verbose=False, run_id=""):
     """Compute offset between modalities of a participant using the max cross-correlation between audio tracks."""
     
     # 1) Extract audio files
@@ -126,7 +134,10 @@ def synchronize(participant_id, group_df, result_row=None, verbose=False):
         result[f'{mod1}_{mod2}'] = lag
         result[f'{mod2}_{mod1}'] = -lag
         result[f'has_{mod1}_audio'] = True; result[f'has_{mod2}_audio'] = True
-        output_file = os.path.join(get_data_root(), 'outputs', 'cross-correlation-outputs-22022025', 'cross_correlation_{}_{}_{}'.format(participant_id, mod1, mod2))
+        output_file = os.path.join(
+            get_data_root(), 'outputs', f'cross-correlation-outputs-{run_id}',
+            f'cross_correlation_{participant_id}_{mod1}_{mod2}',
+        )
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         if lag > 0:
             text = 'Audio track {} is delayed wrt {} by {:.2f}s'.format(mod2, mod1, lag)
@@ -176,7 +187,15 @@ def compute_max_distorsion(row):
     return np.max(check_max_distorsion)
 
 def load_audio(audio_file1, audio_file2, max_duration=20):
-    
+
+    try:
+        import librosa  # noqa: C0415
+    except ImportError as exc:
+        raise ImportError(
+            "librosa is required for audio synchronization. "
+            "Install it with: pip install librosa"
+        ) from exc
+
     # Load the audio files
     try:
         audio1, sr1 = librosa.load(audio_file1)
