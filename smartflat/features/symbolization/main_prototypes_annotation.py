@@ -1,23 +1,40 @@
+"""Interactive annotation of video prototypes using pigeon-jupyter.
+
+Supports the recursive prototyping pipeline (Ch. 5): after clustering,
+prototypes are manually annotated into 5 categories (Noise, task-definitive,
+task-ambiguous, exo-definitive, exo-ambiguous) via an interactive widget.
+
+Requires:
+    - pigeon-jupyter: ``pip install pigeon-jupyter``
+    - IPython/Jupyter environment for the interactive widget
+
+Usage:
+    Called from notebooks during the iterative clustering-annotation loop.
+    See ``smartflat/features/symbolization/`` for the full pipeline.
+"""
+
 import os
 import re
 import sys
 from glob import glob
 
 import pandas as pd
-from IPython.display import Image, display
+
+try:
+    from IPython.display import Image, display
+except ImportError:
+    Image = None
+    display = print
+
 from pigeon import annotate
 
-
-
 from smartflat.configs.loader import import_config
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green
 from smartflat.utils.utils_io import get_data_root
 
 
 def main(config, task_name, modality, n_clusters_folder, permutations=None, overwrite=False, dry=True, local=None):
-    """
-    Annotate prototypes for a given task, modality and number of clusters
-    """
+    """Annotate prototypes for a given task, modality and number of clusters."""
     
     input_image_folder = os.path.join(get_data_root(local=local), 'outputs', config.experiment_name,'figures-clusters', task_name, modality, n_clusters_folder, 'closest')
     print(f'Annotating prototypes from {input_image_folder}')
@@ -104,6 +121,7 @@ if __name__ == '__main__':
     clustering_config_name='ClusteringDeploymentKmeansConfig'
     config = import_config(clustering_config_name)
     
+    # BUG: missing config argument — should be main(config, task_name, modality, n_clusters_folder)
     main(task_name, modality, n_clusters_folder)
     
     #/Users/samperochon/github-repositories/smartflat/data/data-gold-final/dataframes/annotations/pigeon-annotations/clustering-deployment-kmeans-all/prototypes_K_250.csv

@@ -652,8 +652,8 @@ def compute_scores(frame_prediction, frame_gt, overlaps, fps, video_name):
 
 
 def add_twfinch(pipeline, n_clusters):
-    # TODO: TWFINCH dependency — install as proper package if needed
-    from annotation import estimate_cost_matrix
+    # LEGACY: External benchmark function (TWFINCH), not currently functional.
+    # Hardcoded paths to /home/perochon/ — kept for reference only.
     from python.twfinch import FINCH
     from scipy.optimize import linear_sum_assignment
     from sklearn import metrics

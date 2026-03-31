@@ -1,3 +1,30 @@
+"""Clinical annotation parsing for the SDS2 Smartflat study.
+
+Parses behavioral annotations produced by two software tools:
+- **BORIS** (.boris JSON): interval-based (State events) and instantaneous (Point events)
+- **Vidat** (.json): segment-based timeline annotations
+
+Annotations use a clinical coding scheme with 10 categories (A-J):
+    A — Task steps (étapes de la tâche)
+    B — Object/ingredient manipulation
+    C — Visual information gathering
+    D — Purposeless actions
+    E — Events (e.g. oven timer)
+    F — Verbal behavior
+    G — Behavioral errors
+    H — Neuropsychological errors
+    I — Other
+    J — Overall assessment
+
+Two task-specific mappings are provided: ``cuisine`` (chocolate cake) and ``lego``.
+
+Main entry points:
+    - ``AnnotationSmartflat``: per-participant annotation loader
+    - ``process_annotation_folder()``: batch ingest from an annotation folder
+    - ``get_annotation_constants()``: load category mappings and constants
+    - ``add_ground_truth_labels()``: attach frame-wise labels to a dataset DataFrame
+"""
+
 import json
 import os
 import subprocess
@@ -29,7 +56,7 @@ from smartflat.constants import (
     mapping_participant_id_fix,
 )
 from smartflat.utils.utils import pairwise, predict_segments_from_embed_labels
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, display_safe, fi, green, red, yellow
 from smartflat.utils.utils_io import get_data_root, parse_path
 
 
@@ -154,13 +181,17 @@ def retrieve_sample_annotations(participant_id, annot_all=None):
         return sample_annot
     
 def process_annotation_folder(dset, root_dir, process=False):
-    """
-        Explore a folder with boris annotation files and:
-            - If the participant is found in the present "gold" dataset, copy the boris file to their annotation folder.
-            - Report in the file `clinicians_output_path` relevent information when the administration is not found. 
-            - Parse all annotation projects (all potential ones within boris files) and concatenate them to save all annotations in 
-                the `annotation_output_path` file.
-    
+    """Batch ingest annotations from a folder of BORIS/Vidat files.
+
+    Pipeline: walk ``root_dir`` for .boris/.json files -> parse each via
+    ``helper_parse_boris``/``helper_parse_vidat`` -> deduplicate by keeping
+    the annotation path with the most entries per identifier -> save aggregated
+    CSV to ``{data_root}/dataframes/annotations/``.
+
+    Args:
+        dset: SmartflatDataset with metadata (used for registered participant IDs).
+        root_dir: Path to folder containing raw annotation files.
+        process: If True, write output CSVs and copy files. If False, dry run.
     """
     
     registered_participant_ids = dset.metadata.participant_id.unique()
@@ -219,7 +250,7 @@ def process_annotation_folder(dset, root_dir, process=False):
         missing_annotation_mapping_df.to_csv(clinicians_output_path, index=False)
         print(f"Unknown annotations reported in {clinicians_output_path}")
 
-        display(annot_df.drop_duplicates(['participant_id', 'annotation_software']).annotation_software.value_counts())
+        display_safe(annot_df.drop_duplicates(['participant_id', 'annotation_software']).annotation_software.value_counts())
         
         annot_df.to_csv(annotation_output_path_dated, index=False)
         annot_df.to_csv(annotation_output_path, index=False)
@@ -254,11 +285,11 @@ def process_annotation_folder(dset, root_dir, process=False):
         # Remove duplicates basename projects  by using the ones with the maximum number of annotation 
         annot_df['n_basename'] = annot_df.groupby(['annotation_software', 'task_name', 'identifier']).basename.transform(lambda x: len(np.unique(x)))
         annot_df.loc[annot_df['annotation_software'] == 'vidat','n_basename'] = 1
-        display(annot_df['n_basename'].value_counts())
+        display_safe(annot_df['n_basename'].value_counts())
 
         mannot_df = annot_df[annot_df['n_basename'] > 1].sort_values('identifier')
-        display(mannot_df.groupby(['task_name', 'participant_id', 'annotation_software', 'annotation_path', 'basename']).size())
-        display(mannot_df.groupby(['identifier' ,'basename']).size().reset_index().rename(columns={0:'n'}).sort_values(['identifier', 'n'], ascending=False))
+        display_safe(mannot_df.groupby(['task_name', 'participant_id', 'annotation_software', 'annotation_path', 'basename']).size())
+        display_safe(mannot_df.groupby(['identifier' ,'basename']).size().reset_index().rename(columns={0:'n'}).sort_values(['identifier', 'n'], ascending=False))
         max_annot_mapping = mannot_df.groupby(['identifier' ,'basename']).size().reset_index().rename(columns={0:'n'}).sort_values(['identifier', 'n'], ascending=False).drop_duplicates('identifier', keep='first').set_index('identifier').to_dict()['basename']
         annot_df['basename_to_use'] = annot_df.apply(lambda x: max_annot_mapping[x.identifier] if x.identifier in max_annot_mapping.keys() else x.basename, axis=1)
         annot_df = annot_df[annot_df['basename'] == annot_df['basename_to_use']]
@@ -294,8 +325,8 @@ def process_annotation_folder(dset, root_dir, process=False):
     return annot_df, missing_annotation_mapping_df, commands
 
 def helper_parse_vidat(output_dir, vidat_path, df_list, commands, missing_annotation_mapping, registered_participant_ids):
-    
-    # parse annotation sample        
+    """Parse a single Vidat JSON file and append results to ``df_list``."""
+    # parse annotation sample
     annot_df = parse_vidat(task_name='cuisine', annotation_path=vidat_path, save_df=False)
     
     if os.path.basename(vidat_path) in mapping_annotation_path_identifiers.keys():
@@ -313,9 +344,7 @@ def helper_parse_vidat(output_dir, vidat_path, df_list, commands, missing_annota
                                         'project_name': np.nan,
                                         'project_date': np.nan,
                                         'participant_id': 'A DETERMINER'
-                                        })   
-        # import subprocess
-        # subprocess.run(['cp', vidat_path, '/Volumes/Smartflat/data-gold-final/dataframes/annotations/annotations-sans-participants/'])
+                                        })
 
 
     if annot_df is not None:
@@ -342,7 +371,11 @@ def helper_parse_vidat(output_dir, vidat_path, df_list, commands, missing_annota
     return df_list, commands, missing_annotation_mapping
 
 def helper_parse_boris(output_dir, boris_path, df_list, commands, missing_annotation_mapping, registered_participant_ids):
-    
+    """Parse a single BORIS .boris file and append results to ``df_list``.
+
+    Handles participant ID resolution, modality mapping, and copies the BORIS
+    file to the participant's Annotation folder when ``output_dir`` is set.
+    """
     report_text = f"{delim}\nFound boris file: {boris_path}"
 
     # Get data
@@ -495,7 +528,27 @@ def helper_parse_boris(output_dir, boris_path, df_list, commands, missing_annota
     return df_list, commands, missing_annotation_mapping
        
 def parse_vidat(task_name, annotation_path, save_df=True):
-    
+    """Parse a Vidat JSON annotation file into a standardized DataFrame.
+
+    Vidat exports a JSON with ``config.actionLabelData`` (action definitions)
+    and ``annotation.actionAnnotationList`` (timed segments). Each segment has
+    ``start``/``end`` in seconds and an ``action`` index.
+
+    The output DataFrame has columns: Scene Number, Start Frame, Start, End Frame,
+    End, Length (frames), Length, Color, label, Semantic, code, Categorie,
+    Categorie Label, Description, type, fps, t_duration, n_frames.
+
+    After parsing, A2 (recipe reading) rows are duplicated as C1 (visual
+    information gathering) per the clinical coding rules.
+
+    Args:
+        task_name: ``'cuisine'`` or ``'lego'``.
+        annotation_path: Path to the Vidat .json file.
+        save_df: If True, save the parsed DataFrame as CSV alongside the JSON.
+
+    Returns:
+        pd.DataFrame with one row per annotated segment.
+    """
     print(f'Parsing {annotation_path}')
     
     with open(annotation_path, 'r') as f:
@@ -553,7 +606,9 @@ def parse_vidat(task_name, annotation_path, save_df=True):
 
     #df.drop_duplicates(subset=['Start Frame', 'End Frame'], inplace=True)
     
-    # TODOCHECK
+    # Clinical rule: initial recipe reading (A2) also counts as visual information
+    # gathering (C1). Duplicate A2 rows as C1 so both categories are represented.
+    # Same logic is applied in parse_boris() for consistency across annotation tools.
     to_duplicate_row = df[df['label']=='A2'].copy()
     to_duplicate_row['label'] = 'C1'
     to_duplicate_row['Color'] = 0
@@ -564,7 +619,7 @@ def parse_vidat(task_name, annotation_path, save_df=True):
 
 
     df.sort_values(by='Start Frame', inplace=True)
-    
+
     df = fix_annotation_vidat(df, annotation_path)
     # Fix compared to the boris-vidat combiantion
     df.loc[(df['code'] == 31) & (df['label'] == 'A10'), 'code'] = 47
@@ -577,13 +632,26 @@ def parse_vidat(task_name, annotation_path, save_df=True):
     return df
 
 def parse_boris(task_name, annotation_path, basename=None, save_df=True, verbose=False):
-    """Parse Boris file to render the dataframe.
-    
-    Note: 
-        For e.g. annotations/mail-flavie/OLIFra_SC_070618_gateau_FB.boris:
-        data['observations'].keys() -> ['PERSyl_SC_250918_gateau_FB', 'OLIFra_SC_070618_gateau_FB']
-        
-        While it seems the key is the file name, files might host multiple annotations...
+    """Parse a BORIS .boris JSON annotation file into a standardized DataFrame.
+
+    BORIS files contain ``observations`` keyed by project name. Each observation
+    has an event list where entries are either 5-tuples (time, subject, category,
+    modifier, description) or 6-tuples (adding a status field). Events are typed
+    as "State event" (interval with start/stop) or "Point event" (instantaneous).
+
+    State events are paired by matching consecutive entries of the same category
+    to form intervals. BORIS category names are mapped to the canonical A-J code
+    scheme via ``mapping_boris_vidat``.
+
+    Args:
+        task_name: ``'cuisine'`` or ``'lego'``.
+        annotation_path: Path to the .boris JSON file.
+        basename: Specific observation key to parse. If None, uses the first.
+        save_df: If True, save the parsed DataFrame as CSV.
+        verbose: If True, print detailed parsing information.
+
+    Returns:
+        pd.DataFrame with same schema as ``parse_vidat`` output.
     """
     
     
@@ -758,32 +826,6 @@ def parse_boris(task_name, annotation_path, basename=None, save_df=True, verbose
                                             'fps': fps
                                             }, index=[0])
                     df = pd.concat([df, df_row], ignore_index=True)
-                    # except Exception as e:
-                    #     print(e)
-                    #     traceback.print_exc()
-                    #     print(text)
-                        
-                    #     red(f'-> this annotation file may be associated with the wrong task_name={task_name}')
-                    #     print('continue')
-                        
-                    #     df_row = pd.DataFrame({'Scene Number': np.nan, # Filled afterward
-                    #         'Start Frame': np.round(start_time*fps).astype(int), 
-                    #         'Start': start_time, 
-                    #         'End Frame': np.nan, 
-                    #         'End': np.nan, 
-                    #         'Length (frames)': np.nan,
-                    #         'Length': np.nan,
-                    #         'Color': np.nan, #int(mapping_dict[mapping_boris_vidat[category]]['color']), 
-                    #         'label': mapping_boris_vidat[category],
-                    #         'Semantic': np.nan, #mapping_dict[mapping_boris_vidat[category]]['semantic'],
-                    #         'code': np.nan, #int(mapping_dict[mapping_boris_vidat[category]]['code']),
-                    #         'Categorie':  mapping_boris_vidat[category][0],
-                    #         'Categorie Label': mapping_categorie_track[mapping_boris_vidat[category][0]],
-                    #         'Description': description if len(description) > 0 else "None",
-                    #         'Type': 'point',
-                    #         'fps': fp
-                    #         }, index=[0])
-                    #     df = pd.concat([df, df_row], ignore_index=True)
 
         else:
             raise ValueError
@@ -795,7 +837,8 @@ def parse_boris(task_name, annotation_path, basename=None, save_df=True, verbose
 
     #df.drop_duplicates(subset=['Start Frame', 'End Frame'], inplace=True)
 
-    # Set the first step of looking at the recipe as a regular visual inspection interval
+    # Clinical rule: initial recipe reading (A2) also counts as visual information
+    # gathering (C1). Same logic as in parse_vidat().
     to_duplicate_row = df[df['label']=='A2'].copy()
     to_duplicate_row['label'] = 'C1'
     to_duplicate_row['Color'] = 0
@@ -817,7 +860,16 @@ def parse_boris(task_name, annotation_path, basename=None, save_df=True, verbose
     return df
      
 def fix_annotation_vidat(df, annotation_path):
-    
+    """Apply participant-specific corrections to Vidat annotations.
+
+    Currently handles the DUMJEA offset: a 140-second / 3500-frame shift
+    caused by a recording start mismatch. Uses the correction CSV at
+    ``fix_dumjea_path`` from constants.py.
+
+    Note:
+        ``fix_dumjea_path`` in constants.py is a hardcoded absolute path —
+        to be addressed in Stage 7 (constants cleanup).
+    """
     if annotation_path.split('/')[-3] == 'DUMJEA':
         print("Correcting DUMJEA..")
         
@@ -984,7 +1036,7 @@ def create_label_array_from_dataframe(adf, category='A', N=None, verbose=True):
                     y[int(np.floor(row['start_percentile']*N)):int(np.ceil(row['end_percentile'] * N))] = row['code']
                 except:
                     print(row['code'], N, int(np.floor(row['start_percentile']*N)), int(np.ceil(row['end_percentile'] * N)))
-                    display(row.to_frame())
+                    display_safe(row.to_frame())
                     return np.nan
         elif row['type'] == 'point':
             margin_frame = int(2 * row.fps)
@@ -1024,8 +1076,38 @@ def add_ground_truth_labels(df, verbose=False):
     return df
 
 def get_annotation_constants():
+    """Load the clinical annotation coding scheme for the SDS2 study.
 
-    mapping = pd.read_csv(os.path.join(get_data_root(), 'dataframes/tableau_annotation_cuisine_Smartflat.csv'), sep=";")
+    Returns the mapping dictionaries that define how behavioral annotations are
+    encoded. The scheme uses 10 categories (A-J):
+
+        A — Task steps (étapes de la tâche): sequential cooking/lego steps (A0-A11)
+        B — Object/ingredient manipulation: specific items touched (B1-B15)
+        C — Visual information gathering: recipe reading, fixation, exploration (C1-C4)
+        D — Purposeless actions: aimless manipulation, displacement (D1-D4)
+        E — Events: oven timer (E1, aliased to A11)
+        F — Verbal behavior: speech to others or self (F1-F2)
+        G — Behavioral errors: comments, additions, omissions, substitutions (G1-G5)
+        H — Neuropsychological errors: environmental adherence, neglect, etc. (H1-H6)
+        I — Other: unknown/unclassified actions (I2)
+        J — Overall assessment: full task evaluation span (J0)
+
+    Two task-specific mapping dicts are provided (``cuisine_mapping_dict`` and
+    ``lego_mapping_dict``). Each entry maps a code string (e.g. ``'A3'``) to a dict
+    with keys ``semantic`` (human-readable label), ``code`` (integer), ``color``
+    (for chronogram rendering).
+
+    ``mapping_boris_vidat`` translates BORIS software category names to their
+    canonical Vidat code strings, enabling cross-tool consistency.
+
+    Returns:
+        tuple: (order_categories, cuisine_mapping_dict, lego_mapping_dict,
+                mapping_categorie_track, mapping_boris_vidat)
+    """
+    mapping = pd.read_csv(
+        os.path.join(get_data_root(), 'dataframes', 'tableau_annotation_cuisine_Smartflat.csv'),
+        sep=";"
+    )
 
     mapping_dict = {}
     j=0
@@ -1055,10 +1137,9 @@ def get_annotation_constants():
             
             
     cuisine_mapping_dict = {
-                    'A0': {'semantic': 'A: Deplacement dans la salle', 'code': 1, 'color': 0}, 
+                    # --- A: Task steps (étapes de la tâche) ---
+                    'A0': {'semantic': 'A: Deplacement dans la salle', 'code': 1, 'color': 0},
                     'A1': {'semantic': 'A: Présentation du test - consignes', 'code': 2, 'color': 1},
-                    
-                    # Cuisine 
                     'A2': {'semantic': 'A: Lecture initiale de la recette', 'code': 3, 'color': 2},
                     'A3': {'semantic': 'A: Faire fondre le beurre-chocolat', 'code': 4, 'color': 3},
                     'A4': {'semantic': "A: Mélange farine-jaune d'oeuf-sucre", 'code': 5, 'color': 4},
@@ -1069,11 +1150,10 @@ def get_annotation_constants():
                     'A9': {'semantic': 'A: Cuisson', 'code': 10, 'color': 9},
                     'A10': {'semantic': 'A: Melange beure-chocolat et farine-oeuf-sucre', 'code': 47, 'color': 10},
                     
-                    'A11': {'semantic': 'A: Sonnerie du four', 'code': 31, 'color':11}, # Cuisine
-                    'E1': {'semantic': 'A: Sonnerie du four', 'code': 31, 'color':11}, # Cuisine
+                    'A11': {'semantic': 'A: Sonnerie du four', 'code': 31, 'color':11},
+                    'E1': {'semantic': 'A: Sonnerie du four', 'code': 31, 'color':11},  # E1 aliased to A11
 
-                    
-                    # Cuisine 
+                    # --- B: Object/ingredient manipulation ---
                     'B1': {'semantic': 'B: Beurre', 'code': 11, 'color': 0},
                     'B2': {'semantic': 'B: Chocolat', 'code': 12, 'color': 1},
                     'B3': {'semantic': 'B: Farine', 'code': 13, 'color': 2},
@@ -1088,32 +1168,32 @@ def get_annotation_constants():
                     'B12': {'semantic': 'B: Evier', 'code': 22, 'color': 11},
                     'B13': {'semantic': 'B: Moule', 'code': 23, 'color': 12},
                     'B14': {'semantic': 'B: Four', 'code': 24, 'color': 13},
-                    'B15': {'semantic': 'B: Manipulation', 'code': 0, 'color': 14}, # For Boris codes
-                    
-                    
-                    'C1': {'semantic': 'C: Lecture de la recette', 'code': 25, 'color': 0}, # Cuisine
+                    'B15': {'semantic': 'B: Manipulation', 'code': 0, 'color': 14},
+
+                    # --- C: Visual information gathering ---
+                    'C1': {'semantic': 'C: Lecture de la recette', 'code': 25, 'color': 0},
                     'C2': {'semantic': 'C: Fixation', 'code': 26, 'color': 1},
                     'C3': {'semantic': 'C: Exploration visuelle', 'code': 27, 'color': 2},
                     'C4': {'semantic': 'C: Regard examinateur', 'code': 28, 'color': 3},
                     
+                    # --- D: Purposeless actions ---
                     'D1': {'semantic': 'D: Manipule sans utiliser', 'code': 29, 'color': 0},
                     'D2': {'semantic': 'D: Deplacement', 'code': 30, 'color': 1},
-                    'D3': {'semantic': 'D: Betise auto-corrige', 'code': 45, 'color':1}, # Question - Ask Flavie if should be H or G? 
-                    'D4': {'semantic': 'D: Intervention examinateur', 'code': 49, 'color': 3}, # For Boris codes
+                    'D3': {'semantic': 'D: Betise auto-corrige', 'code': 45, 'color': 1},
+                    'D4': {'semantic': 'D: Intervention examinateur', 'code': 49, 'color': 3},
 
-                    
-                    
-                    
-                    
+                    # --- F: Verbal behavior ---
                     'F1': {'semantic': 'F: Aux autres', 'code': 32, 'color': 1},
                     'F2': {'semantic': 'F: A soi-meme', 'code': 33, 'color': 2},
-                    
+
+                    # --- G: Behavioral errors ---
                     'G1': {'semantic': 'G: Commentaires/Questions', 'code': 34, 'color': 0},
                     'G2': {'semantic': 'G: Addition', 'code': 35, 'color': 1},
                     'G3': {'semantic': 'G: Estimation', 'code': 36, 'color': 2},
                     'G4': {'semantic': 'G: Omission', 'code': 37, 'color': 3},
                     'G5': {'semantic': 'G: Substitution/Inversion', 'code': 38, 'color': 4},
-                    
+
+                    # --- H: Neuropsychological errors ---
                     'H1': {'semantic': 'H: Adhérence environnementale', 'code': 39, 'color': 0},
                     'H2': {'semantic': 'H: Négligence du contexte', 'code': 40, 'color': 1},
                     'H3': {'semantic': 'H: Aide/Help/dependance', 'code': 41, 'color': 2},
@@ -1121,18 +1201,14 @@ def get_annotation_constants():
                     'H5': {'semantic': 'H: Trouble du comportement', 'code': 43, 'color': 4},
                     'H6': {'semantic': 'H: Vérification/contrôle', 'code': 44, 'color': 5},
 
+                    # --- I: Other / J: Overall assessment ---
                     'J0': {'semantic': 'J: Evaluation totale', 'code': 48, 'color': 0},
-                    
-                    'I2': {'semantic': 'I: Unknown action', 'code': 46, 'color':2}, # For Boris codes
+                    'I2': {'semantic': 'I: Unknown action', 'code': 46, 'color': 2},
                     }
-    
-    
-                            
-                            
-                            
+
     lego_mapping_dict = {
-                    
-                    'A0': {'semantic': 'A: Deplacement dans la salle', 'code': 1, 'color': 0}, 
+                    # --- A: Task steps (lego construction) ---
+                    'A0': {'semantic': 'A: Deplacement dans la salle', 'code': 1, 'color': 0},
                     'A1': {'semantic': 'A: Présentation du test - consignes', 'code': 2, 'color': 1},
                     #'A2': {'semantic': 'A: Lecture initiale de la consigne', 'code': 3, 'color': 2}, # present at all ? 
                     'A3': {'semantic': 'A: Pylône 1', 'code': 4, 'color': 3},
@@ -1142,45 +1218,49 @@ def get_annotation_constants():
                     'A7': {'semantic': "A: Finitions", 'code': 8, 'color': 7},
                     'A8': {'semantic': "A: Points Saillants", 'code': 9, 'color': 8},
 
-                    'B7': {'semantic': 'B: Manipulation', 'code': 0, 'color': 0}, # TODO: check if those having the B7 code aren't cooking ? 
-                    'B15': {'semantic': 'B: Manipulation', 'code': 0, 'color': 0}, # 
+                    # NOTE: B7/B15 in lego both map to generic manipulation (code=0).
+                    # Open question: verify participants coded B7 in lego aren't actually cooking.
+                    'B7': {'semantic': 'B: Manipulation', 'code': 0, 'color': 0},
+                    'B15': {'semantic': 'B: Manipulation', 'code': 0, 'color': 0},
 
-                    'C1': {'semantic': 'C: Lecture de la consigne', 'code': 25, 'color': 0}, # Cuisine
+                    # --- C: Visual information gathering ---
+                    'C1': {'semantic': 'C: Lecture de la consigne', 'code': 25, 'color': 0},
                     'C2': {'semantic': 'C: Fixation', 'code': 26, 'color': 1},
                     'C3': {'semantic': 'C: Exploration visuelle', 'code': 27, 'color': 2},
                     'C4': {'semantic': 'C: Regard examinateur', 'code': 28, 'color': 3},
-                    
+
+                    # --- D: Purposeless actions ---
                     'D1': {'semantic': 'D: Manipule sans utiliser', 'code': 29, 'color': 0},
                     'D2': {'semantic': 'D: Deplacement', 'code': 30, 'color': 1},
-                                        
+                    'D3': {'semantic': 'D: Betise auto-corrige', 'code': 45, 'color': 1},
+                    'D4': {'semantic': 'D: Intervention examinateur', 'code': 47, 'color': 3},
+
+                    # --- F: Verbal behavior ---
                     'F1': {'semantic': 'F: Aux autres', 'code': 32, 'color': 0},
                     'F2': {'semantic': 'F: A soi-meme', 'code': 33, 'color': 1},
-                    
+
+                    # --- G: Behavioral errors ---
                     'G1': {'semantic': 'G: Commentaires/Questions', 'code': 34, 'color': 0},
                     'G2': {'semantic': 'G: Addition', 'code': 35, 'color': 1},
                     'G3': {'semantic': 'G: Estimation', 'code': 36, 'color': 2},
                     'G4': {'semantic': 'G: Omission', 'code': 37, 'color': 3},
                     'G5': {'semantic': 'G: Substitution/Inversion', 'code': 38, 'color': 4},
-                    
+
+                    # --- H: Neuropsychological errors ---
                     'H1': {'semantic': 'H: Adhérence environnementale', 'code': 39, 'color': 0},
                     'H2': {'semantic': 'H: Négligence du contexte', 'code': 40, 'color': 1},
                     'H3': {'semantic': 'H: Aide/Help/dependance', 'code': 41, 'color': 2},
                     'H4': {'semantic': 'H: Errance et perplexité, action sans but', 'code': 42, 'color': 3},
                     'H5': {'semantic': 'H: Trouble du comportement', 'code': 43, 'color': 4},
                     'H6': {'semantic': 'H: Vérification/contrôle', 'code': 44, 'color': 5},
-                    
-                    'J0': {'semantic': 'J: Evaluation totale', 'code': 48, 'color': 0},
-                    'D3': {'semantic': 'D: Betise auto-corrige', 'code': 45, 'color':1}, # Question - Ask Flavie if should G (cf arbitrage changementd de page, mild errors) 
-                    'I2': {'semantic': 'I: Unknown action', 'code': 46, 'color':2}, # For Boris codes e.g. digression/autre actions non prevu. (ot addition)
-                    'D4': {'semantic': 'D: Intervention examinateur', 'code': 47, 'color': 3}, # For Boris codes
 
+                    # --- I: Other / J: Overall assessment ---
+                    'J0': {'semantic': 'J: Evaluation totale', 'code': 48, 'color': 0},
+                    'I2': {'semantic': 'I: Unknown action', 'code': 46, 'color': 2},
                     }
 
-    
-    
-    # Create mapping dictionary between categories of Boris and vidat annotation 
-    
-
+    # Mapping from BORIS category names to canonical Vidat code strings.
+    # BORIS uses descriptive French labels; this dict normalizes them to the A-J scheme.
     mapping_boris_vidat = {'Te. - Test Gateau en cours': 'J0', # Question comparison: here this is supposed to span all the assessment by the participant (from initial reading to puting the cake in the oven)
                            'Te. - Test': 'J0', 
                             'T. - test Lego': 'J0', 
