@@ -1,3 +1,11 @@
+"""Convert video frame rates to a standardized target fps (default 25).
+
+When to run: When ingesting raw video recordings that need fps normalization.
+Prerequisites: Input directory with MP4 video files.
+Outputs: FPS-converted videos in the output directory structure.
+Usage: python -m smartflat.features.consolidation.main_conversion
+"""
+
 import os
 import subprocess
 

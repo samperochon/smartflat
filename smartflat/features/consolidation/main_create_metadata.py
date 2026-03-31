@@ -1,3 +1,11 @@
+"""Generate base dataset metadata by scanning the data directory.
+
+When to run: After registration and folder structure initialization.
+Prerequisites: Data root directory with task/participant/modality folders.
+Outputs: Loads and prints dataset metadata via the base dataset loader.
+Usage: python -m smartflat.features.consolidation.main_create_metadata
+"""
+
 import os
 import sys
 

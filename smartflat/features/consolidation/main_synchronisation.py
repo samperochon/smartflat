@@ -1,3 +1,11 @@
+"""Compute cross-modality audio synchronization via cross-correlation.
+
+When to run: After audio extraction, to align GoPro and Tobii recordings.
+Prerequisites: Dataset with extracted audio files across modalities.
+Outputs: CSV with per-participant cross-correlation lags and confidence scores.
+Usage: python -m smartflat.features.consolidation.main_synchronisation
+"""
+
 import argparse
 import os
 import sys

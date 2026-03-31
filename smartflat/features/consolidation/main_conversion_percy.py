@@ -1,3 +1,11 @@
+"""Convert video frame rates from Percy hospital recordings to target fps.
+
+When to run: When ingesting raw recordings from the Percy hospital file system.
+Prerequisites: Input directory with MP4 video files from Percy.
+Outputs: FPS-normalized videos (25 fps) or copied Tobii videos in the output directory.
+Usage: python -m smartflat.features.consolidation.main_conversion_percy
+"""
+
 import os
 import subprocess
 import time

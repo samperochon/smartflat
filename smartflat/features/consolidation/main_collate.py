@@ -1,3 +1,11 @@
+"""Merge multiple video partitions into a single consolidated video per modality.
+
+When to run: After registration and folder structure initialization.
+Prerequisites: Root directory with video partitions from GoPro/Tobii recordings.
+Outputs: merged_video.mp4 files and collate_videos.txt logs per modality folder.
+Usage: python -m smartflat.features.consolidation.main_collate
+"""
+
 import argparse
 import logging
 import os

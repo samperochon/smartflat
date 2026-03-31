@@ -1,3 +1,12 @@
+"""Dataset folder structure initialization and collation output validation.
+
+When to run: Before feature extraction to ensure standard folder hierarchy,
+    or after collation to validate merged video outputs.
+Prerequisites: Metadata CSV with task_name and participant_id columns.
+Outputs: Creates task/participant/modality folder structure; validation reports.
+Usage: python -m smartflat.features.consolidation.main_housekeeping
+"""
+
 import argparse
 import os
 import re

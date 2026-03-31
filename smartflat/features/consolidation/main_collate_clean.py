@@ -1,3 +1,11 @@
+"""Clean up residual video partitions after successful collation.
+
+When to run: After main_collate.py has merged video partitions into merged_video.mp4.
+Prerequisites: Dataset with collate flag status; merged_video files present.
+Outputs: Removes partition files and their feature outputs when collation succeeded.
+Usage: python -m smartflat.features.consolidation.main_collate_clean
+"""
+
 import argparse
 import os
 import re

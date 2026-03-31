@@ -1,3 +1,11 @@
+"""Distribute feature extraction outputs from a source folder to the data root.
+
+When to run: After collecting outputs from HPC or external compute.
+Prerequisites: Source folder with structured embeddings (task/participant/modality).
+Outputs: Copies embeddings into the data_root directory preserving folder structure.
+Usage: python -m smartflat.features.consolidation.main_distribute_outputs
+"""
+
 import argparse
 import os
 import subprocess

@@ -1,3 +1,11 @@
+"""Transfer dataset files and metadata to remote storage via rsync.
+
+When to run: When syncing local data with a remote machine or shared storage.
+Prerequisites: Local and remote metadata CSV files; host identification.
+Outputs: Generates and optionally executes rsync commands to transfer data.
+Usage: python -m smartflat.features.consolidation.main_send_data
+"""
+
 import os
 import sys
 import argparse

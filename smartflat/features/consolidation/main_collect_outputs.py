@@ -1,3 +1,11 @@
+"""Collect and aggregate feature extraction outputs from multiple modalities.
+
+When to run: After feature extraction pipelines (video, speech, hands, skeleton) complete.
+Prerequisites: Dataset with computed features (video_representation, speech, hand/skeleton landmarks).
+Outputs: Aggregated embeddings organized by output type in the data root.
+Usage: python -m smartflat.features.consolidation.main_collect_outputs
+"""
+
 import argparse
 import os
 import sys

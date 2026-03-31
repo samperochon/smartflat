@@ -1,3 +1,11 @@
+"""Extract audio (.wav) from consolidated video files.
+
+When to run: After video collation (main_collate.py) has produced merged videos.
+Prerequisites: Dataset with consolidated videos (merged_video or single-video administrations).
+Outputs: .wav audio files alongside each video in the modality folder.
+Usage: python -m smartflat.features.consolidation.main_audio_extraction
+"""
+
 import argparse
 import os
 import sys

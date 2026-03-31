@@ -1,3 +1,11 @@
+"""Initialize the dataset directory structure from metadata.
+
+When to run: After metadata CSV is created, before feature extraction.
+Prerequisites: Path to metadata CSV with task_name, participant_id, and modality columns.
+Outputs: Creates nested folder hierarchy (task/participant/modality) under the data root.
+Usage: python -m smartflat.features.consolidation.main_init_folder_structure
+"""
+
 import argparse
 import logging
 import os
