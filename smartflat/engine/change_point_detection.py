@@ -1,3 +1,25 @@
+"""Kernel Change Point detection (KCP) using the ruptures library.
+
+Implements temporal segmentation via the PELT algorithm (Ch. 5, Section 5.4).
+Detects change points in participants' visual trajectories by identifying
+mean-shifts in RKHS embeddings. Supports multi-process execution across
+participants and penalty parameter sweeps.
+
+Prerequisites:
+    - Embedding data loaded via ``smartflat.datasets.loader.get_dataset``.
+    - Change point model built via ``smartflat.engine.builders.build_model``.
+
+Main entry points:
+    - ``main()``: Run KCP experiments with parameter sweeps.
+    - ``main_deployment()``: Production KCP for a specific penalty/config.
+    - ``change_point_detection()``: Single-sequence change point detection.
+    - ``get_results_change_point_detection()``: Aggregate and collect results.
+
+Outputs:
+    - Change points per sequence saved as DataFrames.
+    - Aggregated results CSV with penalty/score combinations.
+"""
+
 import argparse
 import ast
 import multiprocessing
@@ -13,15 +35,12 @@ import ruptures as rpt
 import seaborn as sns
 from scipy.spatial.distance import pdist
 
-#from typing import Any, Callable, Dict, Literal, Optional
-
-
 
 from smartflat.configs.loader import import_config, load_config
 from smartflat.datasets.loader import get_dataset
 from smartflat.engine.builders import build_metrics, build_model
 from smartflat.utils.utils import get_expids, pairwise
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green, yellow
 from smartflat.utils.utils_io import get_data_root, load_df, parse_video_metadata, save_df
 
 # 1) Experiment
@@ -315,18 +334,6 @@ def change_point_detection(dset, from_idx, to_idx, config):
 
         
 
-        # Deprecated
-        # if self.outliers_removed and remove_outliers:
-        #    from_to_dict = retrieve_mapping(original_size=len(self.idx_embedding), mask_outliers=self.mask_outliers)
-        #    self.cpt = [from_to_dict[c] for c in self.cpt]
-        # Add ruptures of the outliers
-        # outliers_cpt = list(np.argwhere(np.abs(np.ediff1d(self.mask_outliers))>0).flatten())
-        # cpt  = sorted(list(set(self.cpt + outliers_cpt)))
-        # Remove segments of size less than half a secont (artifact from the removal of outliers frames)
-        # min_size=np.ceil(row.fps*.4/config.delta_t).astype(int)
-        # cpt =  [j for i, j in pairwise(cpt) if j-i > min_size]
-        # print("Total {} ruptures after pruning".format(len(cpt)-2))
-
         cpt = [0] + cpt + [N]
         
         n_bkps = len(cpt)-2
@@ -592,28 +599,3 @@ def get_results_change_point_detection(config, annotator_id=None, round_number=N
 
     return results
 
-# def parse_args():
-#     parser = argparse.ArgumentParser(
-#         'Extract TAD features using the videomae model', add_help=False)
-
-#     parser.add_argument(
-#         '--cuda',
-#         default='0',
-#         type=str,
-#         help='GPU id to use')
-
-#     parser.add_argument(
-#         '--reversed',
-#         default=False,
-#         action='store_true',
-#         help='Whether processing videos in reverse order')
-
-#     return parser.parse_args()
-
-
-# if __name__ == '__main__':
-
-#     args = parse_args()
-#     main()
-#     sys.exit(0)
-#     sys.exit(0)

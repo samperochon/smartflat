@@ -6,7 +6,6 @@ import os
 import sys
 import time
 
-#from cuml.mixture import GaussianMixture as CuMLGaussianMixture
 try:
     import faiss
 except:
@@ -24,7 +23,6 @@ from sklearn.metrics.pairwise import pairwise_distances, pairwise_kernels
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 from sklearn.preprocessing import normalize
 
-#from typing import Any, Callable, Dict, Literal, Optional
 
 
 
@@ -38,22 +36,10 @@ try:
 except (ImportError, ModuleNotFoundError):
     FINCH = None
 from smartflat.models.utils import CostCustom
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green, red
 from smartflat.utils.utils_dataset import normalize_data
 from smartflat.utils.utils_io import fetch_qualification_mapping, get_data_root
 
-# import torchmetrics
-
-# import hcdatasets as hcd
-# from healthssl.datasets.cifar10 import build_cifar10_loaders
-# from healthssl.datasets.generic_hcd import build_hcdatasets_loaders
-# from healthssl.engine.custom_metrics import SslMetrics
-
-# from smartflat.models import EcgCNN
-
-# from healthssl.objectives.contrastive import ContrastiveLoss
-# from healthssl.objectives.custom_ssl_losses import InfoNceRegLoss, MultiContrastiveLoss, ContrastiveSupervisedLoss
-# from healthssl.utils.utils_hds import download_model_artifacts
 
 #
 # main builders
@@ -321,26 +307,6 @@ def build_cluster_specified_prototype_model(input_clustering_config_names, quali
 def build_metrics(metric_names=None, **kwargs):
     """Metrics builder.
     """
-    # if task_type == "temporal_segmentation":
-    #     shared_args = {}
-    #     return torchmetrics.MetricCollection(
-    #         {
-    #             "accuracy": torchmetrics.Accuracy(**shared_args),
-    #             "precision_macro": torchmetrics.Precision(
-    #                 average="macro", **shared_args
-    #             ),
-    #             "recall_macro": torchmetrics.Recall(average="macro", **shared_args),
-    #             "f1_score_macro": torchmetrics.F1Score(**shared_args),
-    #             "specificity": torchmetrics.Specificity(**shared_args),
-    #             "average_precision": torchmetrics.AveragePrecision(**shared_args),
-    #             "roc_auc": torchmetrics.AUROC(**shared_args),
-    #             "recall_at_95_precision": torchmetrics.classification.BinaryRecallAtFixedPrecision(
-    #                 min_precision=0.95, **shared_args
-    #             ),
-    #         }
-    #     )
-
-
     metrics = {
                 "silhouette_score_baseline": lambda X, labels, D_M, D_X, D_T, S_M, S_X, S_T, **kwargs: silhouette_score(X=X, labels=labels, metric='cosine', sample_size=None) if 2 <= len(set(labels)) < len(labels) else np.inf,
                 "silhouette_score_M": lambda X, labels, D_M, D_X, D_T, S_M, S_X, S_T, **kwargs: silhouette_score(X=D_M, labels=labels, metric='precomputed', sample_size=None) if 2 <= len(set(labels)) < len(labels) else np.inf,

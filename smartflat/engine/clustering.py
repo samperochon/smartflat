@@ -1,3 +1,24 @@
+"""Cosine k-means clustering via faiss for recursive prototyping.
+
+Implements the core clustering step of the recursive prototyping pipeline
+(Ch. 5, Section 5.2): C=100 candidate centroids per round, cosine k-means
+on residual sets, with optional cross-validation splits.
+
+Prerequisites:
+    - Dataset prepared via ``smartflat.datasets.loader.get_dataset``.
+    - Model and metric builders from ``smartflat.engine.builders``.
+
+Main entry points:
+    - ``main()``: Full clustering experiment with parameter sweeps.
+    - ``main_deployment()``: Production clustering for a specific config/round.
+    - ``main_personalized()``: DEPRECATED — raises DeprecatedWarning.
+    - ``predict_with_centroids()``: Assign samples to nearest centroids.
+
+Outputs:
+    - Centroids saved as .npy files per experiment.
+    - Clustering scores (silhouette, etc.) saved per experiment.
+"""
+
 import ast
 import multiprocessing
 import os
@@ -37,7 +58,7 @@ from smartflat.datasets.utils import load_embedding_dimensions
 from smartflat.engine.builders import build_metrics, build_model
 from smartflat.engine.clustering_evaluation import get_experiments_clustering
 from smartflat.utils.utils import get_expids, pairwise
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import fi, green, red, yellow
 from smartflat.utils.utils_dataset import check_train_data, normalize_data
 from smartflat.utils.utils_io import (
     fetch_qualification_mapping,
@@ -277,13 +298,6 @@ def main(config_name='ClusteringAllConfig', annotator_id: str = 'samperochon', r
         
 
         
-    # elif 'input_clustering_config_names' in config.model_params.keys():
-        
-    #     # We want to fit on all the data and benefit standard infrastructures
-    #     # normalize data to unit norm for more robust cross-clustering prototypes matching 
-    #     X_train = np.vstack([dset[i][0] for i in range(len(dset))])
-    #     X_train /= np.linalg.norm(X_train, axis=1)[:, np.newaxis]
-
     X_train = X_train[np.random.permutation(len(X_train))]
     
     train_scaler_path = os.path.join(output_folder, f'check_scaler_N_{X_train.shape[0]}.pkl')
@@ -319,9 +333,6 @@ def main(config_name='ClusteringAllConfig', annotator_id: str = 'samperochon', r
     model = build_model(config.model_name, config.model_params, verbose=True)
     
     if config.model_name == 'prototypes':
-        # train_scaler = StandardScaler().fit(np.vstack([X_all, model]))       
-        #model = train_scaler.transform(model)
-        #model = normalize_data(model, normalization=normalization) 
         pass
     
     # 2) Scaling
@@ -738,33 +749,6 @@ def predict_with_centroids(X, P, distance='euclidean'):
 
 
 
-# def prepare_training_data(df, cluster_values=[0, 1, 2]):
-#     total_samples = 0
-#     total_vectors = 0
-
-#     def sample_cluster_vectors(row, cluster_values):
-#         nonlocal total_samples, total_vectors
-#         X = np.load(row['video_representation_path'])
-#         labels = row['embedding_labels']
-        
-#         # Fetch indexes of the clusters associated with e.g. task-related/exogeneous clusters
-#         idx_kept = np.argwhere(np.isin(labels, cluster_values)).flatten()
-        
-#         # Update counters
-#         total_samples += len(idx_kept)
-#         total_vectors += len(labels)
-        
-#         return X[idx_kept]
-
-#     X_training = []
-#     for _, row in df.iterrows():
-#         X_training.extend(sample_cluster_vectors(row, cluster_values=cluster_values))
-
-#     # Print final proportion of sampled vectors
-#     proportion = total_samples / total_vectors if total_vectors > 0 else 0
-#     print(f'[INFO] Final proportion of sampled vectors: {total_samples}/{total_vectors} ({proportion:.2%})')
-
-#     return np.vstack(X_training)
 
 # Incremental GMM fitting function
 def fit_gmm_incremental(gmm, data, batch_size=10000):

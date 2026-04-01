@@ -1,3 +1,24 @@
+"""Evaluate clustering experiments across parameter sweeps.
+
+Computes per-participant and global silhouette and Davies-Bouldin scores
+for clustering results produced by ``smartflat.engine.clustering``.
+Used to assess cluster quality in the recursive prototyping pipeline
+(Ch. 5, Section 5.2).
+
+Prerequisites:
+    - Clustering experiments run via ``smartflat.engine.clustering``.
+    - Experiment configs loaded via ``smartflat.configs.loader``.
+
+Main entry points:
+    - ``main(args)``: CLI entry point for batch evaluation.
+    - ``get_results_clustering()``: Aggregate scores across experiments.
+    - ``get_experiments_clustering()``: Load experiment metadata.
+    - ``compute_clustering_scores()``: Parallel per-participant scoring.
+
+Outputs:
+    - ``results.csv`` / ``experiments.csv`` in the outputs folder.
+"""
+
 import argparse
 import ast
 import multiprocessing
@@ -17,8 +38,6 @@ from sklearn.metrics import (
     silhouette_score,
 )
 from sklearn.utils import resample
-
-#from typing import Any, Callable, Dict, Literal, Optional
 
 
 

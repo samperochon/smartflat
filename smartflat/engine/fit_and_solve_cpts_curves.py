@@ -12,7 +12,7 @@ The script uses various modules and libraries such as ast, multiprocessing, os, 
 
 Sam Perochon (sam.perochon@ens-paris-saclay.fr)    
 July 2024.
-TODO: Polish for final packaging ? 
+NOTE: Consider further cleanup during Stage 7 (constants & polish).
 """
 
 import ast
@@ -34,8 +34,6 @@ from sklearn.metrics import (
 )
 from sklearn.utils import resample
 from torch.utils.data import DataLoader
-
-#from typing import Any, Callable, Dict, Literal, Optional
 
 
 

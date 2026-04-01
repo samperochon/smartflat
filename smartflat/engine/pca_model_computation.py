@@ -30,13 +30,12 @@ def main():
         for modality in available_modality:
             
             for whiten in [False]:
-                
-                # Modulable 
-                if task_name != 'cuisine':
-                    pass#continue
-                
-                if modality != 'Tobii':
-                    pass#continue
+
+                # Filters — uncomment to restrict to specific task/modality
+                # if task_name != 'cuisine':
+                #     continue
+                # if modality != 'Tobii':
+                #     continue
                                 
                 config.dataset_params['task_names'] = [task_name]
                 config.dataset_params['modality'] = [modality]
