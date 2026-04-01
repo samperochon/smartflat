@@ -1,3 +1,20 @@
+"""Data preparation for the symbolization pipeline.
+
+Builds the symbolization DataFrame (``build_symbdf``) and loads experiment
+DataFrames (``get_experiments_dataframe``) consumed by main, inference,
+and co_clustering modules.
+
+Prerequisites:
+    - Clustering experiments completed via ``smartflat.engine.clustering``.
+    - Change points computed via ``smartflat.engine.change_point_detection``.
+    - Annotation data loaded via ``smartflat.annotation_smartflat``.
+
+Key functions:
+    - ``build_symbdf()``: Construct the full symbolization DataFrame with
+      embeddings, labels, change points, and optionally gaze features.
+    - ``get_experiments_dataframe()``: Load or create experiment DataFrame
+      for a given config, annotator, and round.
+"""
 
 import argparse
 import datetime
@@ -40,7 +57,7 @@ from smartflat.features.symbolization.utils import (
     update_segmentation_from_embedding_labels,
 )
 from smartflat.utils.utils import pairwise, upsample_sequence
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, green, red
 from smartflat.utils.utils_dataset import quantize_signal, sample_uniform_rows_by_col
 from smartflat.utils.utils_io import fetch_has_gaze, get_data_root, load_df, save_df
 from smartflat.utils.utils_visualization import plot_chronogames

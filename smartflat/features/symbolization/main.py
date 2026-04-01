@@ -1,3 +1,28 @@
+"""Orchestrates the full recursive prototyping and symbolization pipeline.
+
+Implements the P-round recursive prototyping loop (Ch. 5, Section 5.2):
+C=100 candidate centroids per round via cosine k-means, followed by
+human annotation (discriminative step), residual set construction
+(d_min=0.3 threshold), and prototype accumulation across P rounds.
+
+Also performs symbolization (Ch. 5, Section 5.5): assigning each temporal
+segment to its nearest prototype to produce symbolic sequences, with
+optional morphological filtering for smoothing.
+
+Prerequisites:
+    - Embedding dataset loaded via ``smartflat.datasets.loader``.
+    - Change points computed via ``smartflat.engine.change_point_detection``.
+
+Main entry points:
+    - ``define_symbolization()``: Full symbolization for a given config.
+    - ``build_clusterdf()``: Construct cluster-level summary DataFrame.
+    - ``filter_prototypes_per_prevalence()``: Remove low-prevalence prototypes.
+    - ``perform_edges_detection()``: Morphological filtering of segment labels.
+
+Notebooks:
+    - ``demo_recursive_procedure.ipynb``: Shows the multi-round loop.
+    - ``demo_symbolization_gold.ipynb``: Full gold pipeline.
+"""
 
 import argparse
 import os
@@ -12,14 +37,12 @@ from matplotlib.colors import BoundaryNorm, ListedColormap
 from scipy.ndimage import binary_closing, binary_opening, label
 
 
-
 import random
 import time
 from collections import Counter
 
 import aeon
 
-#import umap.umap_ as umap
 import seaborn as sns
 from IPython.display import display
 from matplotlib.colors import ListedColormap
@@ -43,7 +66,7 @@ from smartflat.features.symbolization.visualization import (
     plot_distances_distribution_subplots,
     plot_labels_distributions_subplots,
 )
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, green, red
 from smartflat.utils.utils_dataset import collapse_cluster_stats, compute_matrix_stats
 from smartflat.utils.utils_io import (
     fetch_qualification_mapping,

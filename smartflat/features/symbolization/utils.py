@@ -1,3 +1,22 @@
+"""Shared utility functions for the symbolization pipeline.
+
+Provides segment label propagation, prototype extraction, entropy
+computation, QC sanity checks, distance normalization, and threshold
+estimation used by the recursive prototyping (Ch. 5, Section 5.2)
+and symbolization (Section 5.5) stages.
+
+Called by:
+    - ``smartflat.features.symbolization.main``
+    - ``smartflat.features.symbolization.inference``
+    - ``smartflat.features.symbolization.co_clustering``
+    - ``smartflat.features.symbolization.run_code``
+
+External dependencies:
+    - cv2, decord (video frame access)
+    - pyentrp (sample entropy computation)
+    - ruptures (change point detection models)
+"""
+
 import argparse
 import json
 import logging
@@ -36,7 +55,7 @@ from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import load_embedding_dimensions
 from smartflat.engine.builders import build_model, compute_metrics
 from smartflat.utils.utils import pairwise, upsample_sequence
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, green
 from smartflat.utils.utils_dataset import (
     add_cum_sum_col,
     check_train_data,
