@@ -1,3 +1,21 @@
+"""Visualization functions for the symbolization pipeline.
+
+Provides chronograms, distance distributions, label distributions,
+latent space plots (UMAP/PCA), dendrogram inspection, OT graphs,
+and symbol frequency charts for the recursive prototyping and
+symbolization results (Ch. 5).
+
+Used primarily by notebooks:
+    - ``demo_symbolization_gold.ipynb``
+    - ``demo_prototypes.ipynb``
+    - ``demo_recursive_procedure.ipynb``
+
+External dependencies:
+    - plotly (interactive visualizations)
+    - umap (dimensionality reduction for latent space plots)
+    - decord (video frame extraction)
+"""
+
 import argparse
 import json
 import logging
@@ -37,7 +55,7 @@ from smartflat.datasets.utils import add_pca, add_umap, use_light_dataset
 from smartflat.engine.builders import compute_metrics
 from smartflat.features.symbolization.utils_dataset import get_experiments_dataframe
 from smartflat.utils.utils import pairwise, upsample_sequence
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green
 from smartflat.utils.utils_dataset import collapse_cluster_stats, normalize_data
 from smartflat.utils.utils_io import (
     fetch_output_path,

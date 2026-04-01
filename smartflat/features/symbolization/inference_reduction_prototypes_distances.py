@@ -1,23 +1,31 @@
+"""Reduce prototype distance matrices from K-space to G-space.
+
+After HAC consolidation maps K source prototypes to G meta-prototypes,
+this module transforms per-sample distance matrices from K-dimensional
+to G-dimensional space (Ch. 5, Section 5.3).
+
+Prerequisites:
+    - HAC mapping from ``co_clustering.get_prototypes_mapping``.
+    - Per-sample distance matrices from ``inference``.
+
+Main entry point:
+    - ``main()``: Transform and save reduced distance matrices.
+"""
 
 import argparse
 import os
 import sys
 import time
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-
-import time
-from collections import defaultdict
-
-import matplotlib.pyplot as plt
-
 from smartflat.configs.loader import import_config
 from smartflat.features.symbolization.co_clustering import get_prototypes_mapping
 from smartflat.features.symbolization.utils_dataset import get_experiments_dataframe
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import fi, green
 from smartflat.utils.utils_io import fetch_qualification_mapping, get_data_root
 
 

@@ -93,7 +93,6 @@ from smartflat.features.symbolization.visualization import (
 )
 from smartflat.metrics import plot_clustering_metrics
 from smartflat.utils.utils import pairwise, upsample_sequence
-from smartflat.utils.utils_coding import *
 from smartflat.utils.utils_dataset import (
     add_cum_sum_col,
     check_train_data,

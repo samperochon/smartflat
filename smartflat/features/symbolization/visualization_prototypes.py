@@ -1,3 +1,18 @@
+"""Prototype display functions: nearest/furthest frames for each cluster.
+
+Renders grid visualizations of video frames closest to and furthest from
+each prototype centroid, supporting quality assessment of the vocabulary
+via the Visual Probing Mechanism (Ch. 5, Section 5.2).
+
+Used primarily by:
+    - ``demo_prototypes.ipynb``
+    - ``prototypes_annotator.ipynb``
+
+External dependencies:
+    - decord (video frame extraction)
+    - cv2 (image processing)
+"""
+
 import argparse
 import json
 import logging
@@ -7,7 +22,7 @@ import socket
 import sys
 import time
 from collections import Counter, defaultdict
-from tqdm import tqdm 
+from tqdm import tqdm
 import cv2
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
@@ -19,7 +34,6 @@ from matplotlib.patches import Rectangle
 from scipy.stats import gaussian_kde
 
 
-#import umap.umap_ as umap
 from decord import bridge
 from IPython.display import display
 from sklearn.decomposition import PCA
@@ -30,7 +44,7 @@ from smartflat.datasets.filter import filter_progress_cols
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import use_light_dataset
 from smartflat.utils.utils import pairwise, upsample_sequence
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green
 from smartflat.utils.utils_dataset import collapse_cluster_stats
 from smartflat.utils.utils_io import (
     fetch_output_path,
