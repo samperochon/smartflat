@@ -1,17 +1,39 @@
-"""Utility functions related to the clinical data."""
+"""Clinical data utilities for the SDS2 study (Ch. 6).
+
+Provides functions for assigning diagnosis groups to participants
+in the SDS2 cohort (N=122: 26 controls, 59 TBI, 37 RIL).
+
+The primary grouping is binary:
+- 0 = Control (healthy participants, ``bras='C'``)
+- 1 = Patient (TBI or RIL, ``bras='P'``)
+
+Finer-grained pathology labels (HEALTHY, TBI, RIL) are stored in
+the ``pathologie`` column of the metadata, populated by
+``datasets.utils.append_clinical_data()``.
+"""
+
 import numpy as np
 
 
 def diagnosis_logic(row):
-    '''Returns the diagnosis based on the row's data.
-    
-    The diagnosis is retrieved using in priority:
-    (1) the clinical data files (built in the demo_clinical_data notebok) if available, 
-    (2) the diagnosis number retrieve from the participant_folder if available,
-    
-    NaN is returned if no diagnosis is found.
-    '''
-    
+    """Determine the binary diagnosis group for a participant.
+
+    Checks clinical data fields in priority order:
+    1. ``row['bras']``: 'C' -> 0 (Control), 'P' -> 1 (Patient)
+    2. ``row['diag_number']``: first character 'C' -> 0, 'P' -> 1
+
+    Parameters
+    ----------
+    row : pd.Series
+        A row from the metadata DataFrame, expected to contain
+        'bras' and 'diag_number' columns.
+
+    Returns
+    -------
+    int or float
+        0 for control, 1 for patient, or ``np.nan`` if no
+        diagnosis information is available.
+    """
     if row['bras'] == 'C':
         return 0
     elif row['bras'] == 'P':
@@ -20,39 +42,9 @@ def diagnosis_logic(row):
         return 0
     elif isinstance(row['diag_number'], str) and (row['diag_number'][0] == 'P'):
         return 1
-    
     else:
-        print(f'/!\ No clinical data found for: {row.participant_id} - {row.modality} - trigram: {row.trigram}')
+        print(
+            f'/!\\ No clinical data found for: {row.participant_id}'
+            f' - {row.modality} - trigram: {row.trigram}'
+        )
         return np.nan
-    
-
-# Sippett code for the clinical data missing values (untidy...)
-# clinical_data_path = os.path.join(get_data_root(), 'dataframes', 'clinical', 'merged-clinical-data-mupt.csv')
-    
-# cdf = pd.read_csv(clinical_data_path)
-# cdf[cdf.trigram.apply(lambda x: 'lamthe' in x)]
-
-
-# df = dset.metadata
-
-
-# df_unknown_diag = df[(~df['group'].isin([0, 1]) |  (df['pathologie'].isna()) | (df['pathologie'] == 'OTH'))][['participant_id', 'group', 'pathologie', 'MoCA', 'ISDC']].drop_duplicates('participant_id')
-
-
-# mapping_participant_id_fix_reversed = {v:k for k, v in mapping_participant_id_fix.items()}
-# df_unknown_diag['autre_participant_id'] = df_unknown_diag.participant_id.map(mapping_participant_id_fix_reversed)
-# df_unknown_diag['autre_participant_id']
-
-# from smartflat.utils.utils_io import fetch_has_gaze, get_data_root, load_df, save_df
-
-
-# from smartflat.utils.utils_io import parse_participant_id
-# df_unknown_diag[["task_number", "diag_number", "trigram", "date_folder"]] = df_unknown_diag["participant_id"].apply(parse_participant_id)
-
-
-
-# df_unknown_diag[['participant_id', 'autre_participant_id', 'group', 'pathologie', 'MoCA', 'ISDC']].sort_values(['pathologie']).to_csv('/Volumes/Smartflat/data-gold-final/dataframes/annotations/participants_sans_pathologie_ou_autre.csv', index=False)
-
-
-
-# df_unknown_diag[df_unknown_diag['trigram'].apply(lambda x: x in cdf.trigram.to_list())]
