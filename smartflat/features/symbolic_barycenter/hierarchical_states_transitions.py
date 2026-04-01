@@ -1,32 +1,32 @@
+"""Hierarchical community detection and Markov chain analysis (Ch. 6).
 
-import argparse
+Provides functions for building hierarchical trees from transition matrices,
+detecting communities via tree-cutting, and visualizing the resulting
+hierarchical structure.
+
+Originally adapted from the VAME framework (Variational Animal Motion
+Embedding) for behavioral state analysis. The ``get_motif_usage`` function
+(line ~554) was extracted from ``vame.analysis.pose_segmentation``.
+"""
+
+import logging
 import os
 import pickle
+import random
 import sys
-import time
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-import fastcluster
+if sys.version_info >= (3, 8):
+    from typing import Literal
+else:
+    from typing_extensions import Literal
+
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import pandas as pd
-import scipy.cluster.hierarchy as sch
-import seaborn as sns
-from IPython.display import display
-from tqdm import tqdm
 
-# # from vame.util.cli import get_sessions_from_user_input
-# # from vame.visualization.community import draw_tree
-# # from vame.schemas.states import save_state, CommunityFunctionSchema
-# # from vame.schemas.project import SegmentationAlgorithms
-# # from vame.logging.logger import VameLogger
-# from vame.analysis.pose_segmentation import get_motif_usage
-
-
-# logger_config = VameLogger(__name__)
-# logger = logger_config.logger
+logger = logging.getLogger(__name__)
 
 
 def get_adjacency_matrix(
@@ -357,7 +357,8 @@ def save_cohort_community_labels_per_session(
     segmentation_algorithm: str,
     cohort_community_bag: list,
 ) -> None:
-    for idx, session in enumerate(sessions):
+    """Save community labels for each session individually."""
+    for _, session in enumerate(sessions):
         path_to_dir = os.path.join(
             config["project_path"],
             "results",
@@ -388,7 +389,6 @@ def save_cohort_community_labels_per_session(
         )
 
 
-##save_state(model=CommunityFunctionSchema)
 def community(
     config: dict,
     cut_tree: Optional[None] = None,
@@ -428,7 +428,9 @@ def community(
     """
     if save_logs:
         log_path = Path(config["project_path"]) / "logs" / "community.log"
-        logger_config.add_file_handler(str(log_path))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(str(log_path))
+        logger.addHandler(fh)
 
     model_name = config["model_name"]
     n_clusters = config["n_clusters"]
@@ -438,9 +440,10 @@ def community(
     if config["all_data"] in ["Yes", "yes", "True", "true", True]:
         sessions = config["session_names"]
     else:
-        sessions = get_sessions_from_user_input(
-            config=config,
-            action_message="run community analysis",
+        raise NotImplementedError(
+            "Interactive session selection (get_sessions_from_user_input) "
+            "is not available. Set config['all_data'] to True or provide "
+            "session_names in the config."
         )
 
     print("---------------------------------------------------------------------")
@@ -500,7 +503,6 @@ def community(
 
         # STEP 3
         cohort_community_bag = create_cohort_community_bag(
-            config=config,
             motif_labels=cohort_motif_labels,
             trans_mat_full=trans_mat_full,
             cut_tree=cut_tree,
@@ -535,9 +537,7 @@ def community(
         with open(os.path.join(path_to_dir, "hierarchy" + ".pkl"), "wb") as fp:  # Pickling
             pickle.dump(cohort_community_bag, fp)
 
-        # Added by Luiz - 11/10/2024
-        # Saves the full community labels list for each one of sessions
-        # This is useful for further analysis when cohort=True
+        # Save per-session community labels (added by Luiz, 2024-11-10)
         save_cohort_community_labels_per_session(
             config=config,
             sessions=sessions,
@@ -546,11 +546,9 @@ def community(
             segmentation_algorithm=seg,
             cohort_community_bag=cohort_community_bag,
         )
-        
-        
-# pose_segmentation.py
 
 
+# Originally from vame.analysis.pose_segmentation
 def get_motif_usage(
     session_labels: np.ndarray,
     n_clusters: int,
@@ -579,11 +577,6 @@ def get_motif_usage(
     if unused_motifs.size > 0:
         print(f"Warning: The following motifs are unused: {unused_motifs}")
     return motif_usage
-
-
-
-# tree_hierarchy.py
-
 
 def merge_func(
     transition_matrix: np.ndarray,
@@ -872,12 +865,6 @@ def bag_nodes_by_cutline(
 
 
 
-
-
-
-# community.py
-
-
 def hierarchy_pos(
     G: nx.Graph,
     root:Union[str, None] = None,
@@ -960,7 +947,7 @@ def hierarchy_pos(
 def draw_tree(
     T: nx.Graph,
     fig_width: float = 20.0,
-    usage_dict: Dict[str, float] = dict(),
+    usage_dict: Optional[Dict[str, float]] = None,
     save_to_file: bool = True,
     show_figure: bool = False,
     results_dir:Union[str, None] = None,
@@ -987,7 +974,8 @@ def draw_tree(
     -------
     None
     """
-    # pos = nx.drawing.layout.fruchterman_reingold_layout(T)
+    if usage_dict is None:
+        usage_dict = {}
     pos = hierarchy_pos(
         G=T,
         root="Root",
