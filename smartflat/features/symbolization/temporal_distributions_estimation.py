@@ -1,5 +1,28 @@
+"""KDE-based temporal distribution estimation and Wasserstein distance computation.
+
+Estimates when each prototype appears in video sequences using kernel density
+estimation (KDE), then computes Wasserstein and Gromov-Wasserstein distances
+between temporal profiles. Used for multi-view HAC consolidation
+(Ch. 5, Section 5.3).
+
+Prerequisites:
+    - Symbolization DataFrame from ``utils_dataset.get_experiments_dataframe``.
+    - Cluster labels assigned by inference or main pipeline.
+
+Main entry points:
+    - ``estimate_kde_model()``: Fit KDE per prototype temporal distribution.
+    - ``compute_wasserstein_distance()``: 1D Wasserstein between KDEs.
+    - ``compute_gw_costs_and_transport_maps()``: Gromov-Wasserstein distance.
+    - ``plot_gw_temporal_distance()``: Visualize temporal distance matrices.
+
+External dependencies:
+    - ot (POT library for optimal transport)
+    - scipy.stats (gaussian_kde)
+    - statsmodels (KDEUnivariate)
+"""
 
 import argparse
+import multiprocessing as mp
 import os
 import random
 import sys
@@ -8,11 +31,8 @@ from collections import Counter
 
 import aeon
 import cv2
-
-#import umap.umap_ as umap
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
-from scipy.stats import wasserstein_distance
 import numpy as np
 import ot
 import pandas as pd
@@ -24,25 +44,20 @@ from IPython.display import display
 from joblib import Parallel, delayed
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from ot.gromov import gromov_wasserstein, gromov_wasserstein2
-#from scipy.integrate import simps
 from scipy.integrate._quadrature import simps
 from scipy.interpolate import interp1d
 from scipy.ndimage import binary_closing, binary_opening, label
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist, squareform
-from scipy.stats import gaussian_kde, rv_continuous
+from scipy.stats import gaussian_kde, rv_continuous, wasserstein_distance
 from sklearn.metrics.pairwise import pairwise_kernels
 from statsmodels.nonparametric.kde import KDEUnivariate
 from tqdm import tqdm
 
-import multiprocessing as mp
-
-
-
 from smartflat.configs.loader import import_config
 from smartflat.features.symbolization.utils_dataset import get_experiments_dataframe
 from smartflat.utils.utils import pairwise
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green
 from smartflat.utils.utils_visualization import get_base_colors
 
 # 1) Kernel Density estimation (KDE) of the temporal distributions

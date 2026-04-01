@@ -1,37 +1,51 @@
+"""Predict symbolic sequences by projecting embeddings onto prototype subspaces.
+
+After prototypes are established via recursive prototyping (Ch. 5, Section 5.2)
+and optionally consolidated via HAC (Section 5.3), this module assigns each
+embedding to its nearest prototype using cosine/RBF kernel distances.
+Supports Wasserstein projection and orthonormal basis projection for
+refined distance computation.
+
+Prerequisites:
+    - Prototypes computed via recursive prototyping (``main.py``).
+    - Optionally, HAC-reduced prototypes (``co_clustering.py``).
+
+Main entry points:
+    - ``main()``: Run inference across all participants.
+    - ``inference_projection()``: Single-participant inference.
+    - ``compute_wasserstein_projection()``: OT-based prototype assignment.
+
+External dependencies:
+    - faiss (fast cosine nearest-neighbor search)
+    - ot (optimal transport for Wasserstein projection)
+"""
 
 import argparse
 import os
 import sys
 import time
+import random
+from collections import Counter
 
 try:
     import faiss
-except:
+except Exception:
     pass
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from IPython.display import display
-from scipy.spatial.distance import cdist
-from sklearn.metrics import pairwise_distances
-from sklearn.preprocessing import StandardScaler
-
-
-
-import random
-import time
-from collections import Counter
-
-import matplotlib.pyplot as plt
 import ot
+import pandas as pd
 import scipy.linalg
 import seaborn as sns
 import torch
+from IPython.display import display
 from matplotlib.colors import ListedColormap
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.metrics import pairwise_distances
+from sklearn.preprocessing import StandardScaler
 
 from smartflat.configs.loader import import_config
 from smartflat.datasets.loader import get_dataset
@@ -41,7 +55,7 @@ from smartflat.features.symbolization.main import define_symbolization
 from smartflat.features.symbolization.utils import gaussian_rbf_matrix, get_prototypes
 from smartflat.features.symbolization.utils_dataset import get_experiments_dataframe
 from smartflat.features.symbolization.visualization import plot_ot_graphs, plot_trajectory
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, fi, green, red
 from smartflat.utils.utils_dataset import (
     add_cum_sum_col,
     check_train_data,

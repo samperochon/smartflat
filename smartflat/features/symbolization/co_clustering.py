@@ -1,40 +1,57 @@
+"""Hierarchical agglomerative clustering (HAC) for prototype consolidation.
+
+Implements the HAC consolidation step (Ch. 5, Section 5.3): combines
+latent-space cosine distance with Wasserstein temporal distance to cluster
+K accumulated centroids into G final prototypes (vocabulary size ~55).
+Silhouette score maximization selects optimal G.
+
+Supports multiple linkage methods (Ward, complete, average) and
+multi-modal distance kernels (multiplicative, additive).
+
+Prerequisites:
+    - Recursive prototyping completed (K source centroids accumulated).
+    - Temporal distributions estimated via
+      ``temporal_distributions_estimation``.
+
+Main entry points:
+    - ``compute_multimodal_matrices()``: Build multi-view distance matrices.
+    - ``clustering_prototypes_space()``: Run HAC with silhouette optimization.
+    - ``run_comparison_clusterings()``: Compare HAC vs alternatives (K-Means,
+      DBSCAN, HDBSCAN, GMM, Spectral).
+
+External dependencies:
+    - fastcluster (efficient HAC linkage computation)
+    - hdbscan (density-based clustering alternative)
+"""
 
 import argparse
+import json
 import os
 import sys
 import time
 
+import fastcluster
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from IPython.display import display
-from tqdm import tqdm
-import json
-
-
-
-import time
-
-import fastcluster
-import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as sch
 import seaborn as sns
+from hdbscan import HDBSCAN
 from IPython.display import display
 from scipy.spatial.distance import pdist, squareform
-from sklearn.cluster import SpectralClustering
-from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
-from sklearn.cluster import KMeans, SpectralClustering, DBSCAN
-from sklearn.metrics import adjusted_rand_score
-from hdbscan import HDBSCAN
-from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 from sklearn.manifold import MDS
+from sklearn.metrics import adjusted_rand_score
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
+from tqdm import tqdm
 
 from smartflat.configs.loader import import_config
 from smartflat.engine.builders import build_metrics, compute_metrics
 from smartflat.features.symbolization.temporal_distributions_estimation import (
     compute_gw_costs_and_transport_maps,
-    estimate_kde_model,
     compute_wasserstein_distance,
+    estimate_kde_model,
     plot_gw_temporal_distance,
 )
 from smartflat.features.symbolization.utils import (
@@ -49,7 +66,7 @@ from smartflat.features.symbolization.visualization import (
     explore_inconsistency_depth_threshold,
 )
 from smartflat.metrics import plot_clustering_metrics
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green, purple, yellow
 from smartflat.utils.utils_io import (
     fetch_qualification_mapping,
     get_data_root,
