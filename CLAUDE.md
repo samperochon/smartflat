@@ -140,4 +140,23 @@ python -m smartflat.features.hands.main
 
 ## Refactoring Status
 
-This repo was created from the thesis-era `smartflat-thesis` codebase (archived on GitHub, tag `v-thesis-final`). Refactoring is in progress — see the plan in `.claude/plans/` for current status.
+This repo was created from the thesis-era `smartflat-thesis` codebase (archived on GitHub, tag `v-thesis-final`).
+
+### Completed Stages (March–April 2026)
+
+| Stage | Scope | Status |
+|-------|-------|--------|
+| 0 | Foundation (package scaffolding, `.gitignore`, `pyproject.toml`) | Done |
+| 1 | Archive & Migration (copy from thesis repo, clean history) | Done |
+| 2 | Data Infrastructure (`utils_paths.py`, `utils_video.py`, corrections) | Done |
+| 3 | Annotations (`annotation.py` deleted, `annotation_smartflat.py` documented) | Done |
+| 4 | Engine + Symbolization (star imports, docstrings, 20 files cleaned) | Done |
+| 5 | Barycenter + Clinical (VAME bugs fixed, 80+ unused imports removed) | Done |
+| 6 | Notebooks (all 7 notebooks NB01–NB07 filled with production code) | Done |
+| 7 | Polish (star imports replaced, TODOREMOVE cleaned, dead code removed) | Done |
+
+### Remaining
+
+- **Stage 8 — Documentation**: Create `README.md`, `NOTEBOOK_ARCHIVE.md`, update this file
+- **NB00 — Data Overview**: New notebook surveying available data structure and completeness
+- **NB08 — Thesis Figures** (optional): Port figure-generation notebook from thesis repo
