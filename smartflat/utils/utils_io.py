@@ -573,8 +573,6 @@ def collect_embeddings(
                 yellow(" ".join(command))
                 commands.append(command)
 
-        # TODOREMOVE print("Copied {} to {}/ ...".format(representation, embed_folder))
-
         # logger.info(f'{__file__} - {__name__} - Copied {output_type} to {embed_folder}')
         n_copied += 1
 

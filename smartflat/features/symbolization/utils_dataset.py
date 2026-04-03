@@ -516,7 +516,6 @@ def get_experiments_dataframe(experiment_config_name='ClusteringDeploymentKmeans
     #         print(f"Column '{col}' is of dtype: {df[col].apply(lambda arr: arr.dtype).iloc[0]}")
         
 
-    # TODOREMOVE after some time for updating
     if 'symb_labels' in df.columns:
         df_new = pd.DataFrame({
             'symb_p_noise': df['symb_labels'].apply(lambda x: np.sum([i == -1 for i in x]) / len(x)),
