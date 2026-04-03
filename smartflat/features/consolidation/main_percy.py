@@ -11,9 +11,6 @@ from time import time
 import numpy as np
 import pandas as pd
 
-,
-)
-
 from smartflat.constants import expected_folders
 from smartflat.datasets.loader import get_dataset
 from smartflat.utils.utils_io import get_data_root, get_file_size_in_gb, parse_participant_id
@@ -29,7 +26,7 @@ def send_percy_to_harddrive_to_complete_remote(
     metadata = pd.read_csv(path_metadata)
     metadata["task_name"] = metadata["task_name"].apply(
         lambda x: "cuisine" if x == "cooking" else x
-    )  # TODOREMOVE
+    )
 
     video_paths = []
     for (task_name, participant_id, modality), group in df.groupby(
@@ -139,7 +136,7 @@ def send_percy_to_harddrive(
     metadata = pd.read_csv(path_metadata)
     metadata["task_name"] = metadata["task_name"].apply(
         lambda x: "cuisine" if x == "cooking" else x
-    )  # TODOREMOVE
+    )
 
     video_paths = []
     total_size = 0
@@ -220,7 +217,7 @@ def send_percy_to_harddrive_vs_local(
     metadata = pd.read_csv(path_metadata)
     metadata["task_name"] = metadata["task_name"].apply(
         lambda x: "cuisine" if x == "cooking" else x
-    )  # TODOREMOVE
+    )
 
     video_paths = []
     total_size = 0
@@ -322,7 +319,7 @@ def send_percy_to_harddrive_vs_local(
     metadata = pd.read_csv(path_metadata)
     metadata["task_name"] = metadata["task_name"].apply(
         lambda x: "cuisine" if x == "cooking" else x
-    )  # TODOREMOVE
+    )
 
     video_paths = []
     total_size = 0
@@ -423,7 +420,7 @@ def send_percy_to_harddrive_vs_local(
     metadata = pd.read_csv(path_metadata)
     metadata["task_name"] = metadata["task_name"].apply(
         lambda x: "cuisine" if x == "cooking" else x
-    )  # TODOREMOVE
+    )
 
     video_paths = []
     total_size = 0
@@ -617,7 +614,7 @@ def output_modality_not_found_percy(root_dir=None):
     metadata = pd.read_csv(path_metadata)
     metadata["task_name"] = metadata["task_name"].apply(
         lambda x: "cuisine" if x == "cooking" else x
-    )  # TODOREMOVE
+    )
     # metadata = metadata[metadata['size'] > 0.05]
     # metadata = metadata[metadata['n_frames'] > 100]
 

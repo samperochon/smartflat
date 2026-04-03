@@ -18,8 +18,7 @@ import pandas as pd
 
 
 from smartflat.datasets.loader import get_dataset
-from smartflat.utils.utils_coding import *
-from smartflat.utils.utils_collate import *
+from smartflat.utils.utils_coding import red
 from smartflat.utils.utils_collate import remove_output_files, write_collate
 from smartflat.utils.utils_io import (
     get_data_root,

@@ -18,7 +18,7 @@ from smartflat.constants import (
     gaze_useful_columns,
 )
 from smartflat.utils.utils import pairwise
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green, red
 from smartflat.utils.utils_io import get_data_root
 
 # def parse_tobii_data(filename):        

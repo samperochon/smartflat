@@ -37,7 +37,7 @@ from smartflat.constants import (
 )
 from smartflat.utils.utils import check_and_convert
 from smartflat.utils.utils_clinical import diagnosis_logic
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, green, red, yellow
 from smartflat.utils.utils_io import (
     check_video,
     fetch_flag_path,

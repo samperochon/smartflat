@@ -9,7 +9,7 @@ import sys
 # add tools path and import our own tools
 
 from smartflat.datasets.loader import get_dataset
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, red, yellow
 from smartflat.utils.utils_io import collect_embeddings, fetch_flag_path
 
 

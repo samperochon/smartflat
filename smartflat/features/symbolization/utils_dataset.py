@@ -145,7 +145,7 @@ def build_symbdf(experiment_config_name, overwrite_inference=False, overwrite=Fa
     n=len(df)
     #display( df[~df.apply(lambda x: x.embedding_labels.shape[0] - x.N, axis=1) == 0])
     #df = df[df.apply(lambda x: x.embedding_labels.shape[0] - x.N, axis=1) == 0]
-    print(f"Removed {n-len(df)} rows with N != |embedding_labels| ") #TODOSAM
+    print(f"Removed {n-len(df)} rows with N != |embedding_labels| ")
 
     #assert df.apply(lambda x: (x.cpts[-1] - x.N) != 0, axis=1).sum() == 0
     #n=len(df)

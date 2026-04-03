@@ -19,7 +19,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from smartflat.annotation_smartflat import get_annotation_constants
 from smartflat.utils.utils import pad_sequence_with_zeros, upsample_sequence
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, fi
 from smartflat.utils.utils_dataset import get_long_embedding
 from smartflat.utils.utils_io import parse_identifier
 from PIL import Image as PILImage

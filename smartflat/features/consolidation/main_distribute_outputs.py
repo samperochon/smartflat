@@ -16,7 +16,7 @@ import numpy as np
 
 
 from smartflat.datasets.loader import get_dataset
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, yellow
 from smartflat.utils.utils_io import (
     check_exist,
     collect_embeddings,

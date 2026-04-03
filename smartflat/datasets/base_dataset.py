@@ -30,7 +30,7 @@ from smartflat.datasets.build import generate_video_metadata
 from smartflat.datasets.filter import filter_outlier_video_names
 from smartflat.datasets.utils import append_annotations
 from smartflat.datasets.visualization import show_video_metadata
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, green, purple, yellow
 from smartflat.utils.utils_collate import get_collate_subset
 from smartflat.utils.utils_io import get_data_root, get_host_name
 

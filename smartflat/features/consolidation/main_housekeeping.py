@@ -38,7 +38,8 @@ from smartflat.utils.utils_io import (
 )
 from smartflat.utils.utils_visualization import print_get_last_modified_date
 
-from smartflat.utils.utils_coding import * 
+from smartflat.utils.utils_coding import green, select
+
 def extract_file_paths(file_path):
     paths = []
     with open(file_path, "r") as file:

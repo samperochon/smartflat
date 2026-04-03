@@ -19,7 +19,7 @@ from IPython.display import display
 # add tools path and import our own tools
 
 from smartflat.datasets.loader import get_dataset
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import yellow
 from smartflat.utils.utils_collate import remove_output_files
 from smartflat.utils.utils_io import (
     fetch_flag_path,

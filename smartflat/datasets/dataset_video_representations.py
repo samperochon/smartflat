@@ -28,7 +28,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     test_dataset_video_representations = None
 from smartflat.utils.utils import add_cols_suffixes, pairwise, smartflat_range
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import blue, filter_progress_cols, green
 from smartflat.utils.utils_dataset import train_test_val_split_by
 from smartflat.utils.utils_io import get_data_root, load_pca
 from smartflat.utils.utils_transform import zscore

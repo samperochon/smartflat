@@ -15,11 +15,8 @@ import sys
 import numpy as np
 from IPython.display import display
 
-,
-)
-
 from smartflat.datasets.loader import get_dataset
-from smartflat.utils.utils_coding import *
+from smartflat.utils.utils_coding import green, red, yellow
 from smartflat.utils.utils_collate import write_collate
 from smartflat.utils.utils_io import (
     check_video,

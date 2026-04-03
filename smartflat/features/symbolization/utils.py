@@ -361,7 +361,7 @@ def qc_sanity_check_filters(df, do_filter=True, has_video=True, max_identifier=N
     #df = df[df['delta_t_eff'] in  8]
     print(f"/!\ Keep {len(df[df['delta_t_eff'] != 8])} rows with delta_t_eff != 8 ie  N_f/N_x != stride (N={len(df)})" )
 
-    # We exclude incomplete embedding computation TODOREMOVE ? 
+    # We exclude incomplete embedding computation
     # n = len(df)
     # df["M_is_close"] = df.apply(lambda x: np.isclose(x.N, x.n_idx_embedding, atol=16), axis=1)
     # if do_filter: 
