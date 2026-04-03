@@ -17,12 +17,27 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import seaborn as sns
-from aeon.distances import twe_alignment_path
-from aeon.distances._rtwe import rtwe_alignment_path
 from matplotlib.patches import Patch
 
-from smartflat.features.symbolic_barycenter.main import get_segments
+try:
+    from aeon.distances import twe_alignment_path
+    HAS_AEON = True
+except ImportError:
+    HAS_AEON = False
+
+from smartflat.engine.distances._rtwe import rtwe_alignment_path
 from smartflat.utils.utils_coding import blue, green, red
+
+
+def _get_segments(labels):
+    """Identify contiguous segments in a label array (local copy to avoid circular import)."""
+    import numpy as _np
+    labels = _np.array(labels)
+    change = _np.where(labels[1:] != labels[:-1])[0] + 1
+    start_idxs = _np.r_[0, change]
+    end_idxs = _np.r_[change, len(labels)]
+    values = labels[start_idxs]
+    return list(zip(start_idxs, end_idxs, values))
 from smartflat.utils.utils_visualization import get_cmap
 
 
@@ -218,6 +233,8 @@ def plot_chronogram_alignment(
             precomputed_distances=precomputed_distances,
         )
     elif paths is None and method == 'twe':
+        if not HAS_AEON:
+            raise ImportError("aeon is required for method='twe'. Install with: pip install aeon")
         paths = twe_alignment_path(x, y, nu=nu, lmbda=lmbda, window=window)
     else:
         paths = [paths]
@@ -577,7 +594,7 @@ def plot_rtwe(
     plt.plot(del_y_costs, label='Del Y Costs', marker='o', alpha=0.7)
     plt.plot(total_costs, label='Total Costs', marker='o', linewidth=2, color='black', alpha=0.8)
 
-    segments = get_segments(path_labels)
+    segments = _get_segments(path_labels)
 
     plt.title('RTWE Alignment Costs', fontsize=18, fontweight='bold')
     plt.xlabel('Step', fontsize=14)

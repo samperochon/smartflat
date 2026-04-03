@@ -1,3 +1,9 @@
+---
+noteId: "d6b7dba02f8711f1b60c85121fd90d06"
+tags: []
+
+---
+
 # CLAUDE.md — Smartflat Project
 
 ## Project Overview
@@ -23,7 +29,7 @@ The framework processes video recordings from multiple camera sources (GoPro, To
 | 1 | **Data preprocessing**: Raw multimodal recordings → VideoMAE-v2 latent sequences (D=1408) | Ch. 4 | `features/video/`, `features/consolidation/`, `datasets/` |
 | 2 | **Recursive prototyping**: Iterative cosine k-means (P=8 rounds, C=100), visual probing, HAC consolidation → ~55 validated prototypes | Ch. 5 | `features/symbolization/`, `engine/clustering.py` |
 | 3 | **Temporal segmentation**: Kernel change-point detection (PELT) with slope heuristic → ~274 segments/sequence | Ch. 5 | `engine/change_point_detection.py`, `configs/change_points_config.py` |
-| 4 | **Barycenter averaging**: Temporal-Wasserstein TWE distance + adapted DBA for symbolic sequences | Ch. 6 | `features/symbolic_barycenter/` |
+| 4 | **Barycenter averaging**: Temporal-Wasserstein TWE distance + adapted DBA for symbolic sequences | Ch. 6 | `features/symbolic_barycenter/`, `engine/distances/` |
 | 5 | **Clinical analysis**: Group comparisons (Control/TBI/RIL), temporal distributions, descriptive statistics | Ch. 6 | `utils/utils_clinical.py`, notebooks |
 
 ### Ongoing / Incomplete Work
@@ -67,6 +73,10 @@ The framework processes video recordings from multiple camera sources (GoPro, To
   - `clustering.py`: Cosine k-means (faiss), kernel k-means
   - `clustering_evaluation.py`: Silhouette, DBI, CHI
   - `builders.py`: Model/metrics factory functions
+  - `distances/`: Vendored elastic distance metrics for symbolic sequences (Ch. 6 contribution)
+    - `_rtwe.py`: Registered TWE — TWE with precomputed prototype distance matrix (replaces Euclidean)
+    - `_eshape_dtw.py`: Edit-Shape DTW using rTWE as inner cost
+    - `_alignment_paths.py`, `_bounding_matrix.py`, `_utils.py`: Vendored from aeon (BSD-3)
 
 - **`utils/`**: Utilities
   - `utils_io.py`: Host-aware data path detection via `get_data_root()`

@@ -29,7 +29,6 @@ import sys
 import time
 from collections import Counter
 
-import aeon
 import cv2
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt

@@ -17,12 +17,12 @@ Key concepts (Ch. 6, Section 6.2):
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from aeon.distances._alignment_paths import (
+from smartflat.engine.distances._alignment_paths import (
     _add_inf_to_out_of_bounds_cost_matrix,
     compute_min_return_path,
 )
-from aeon.distances._bounding_matrix import create_bounding_matrix
-from aeon.distances._rtwe import rtwe_alignment_path_with_costs
+from smartflat.engine.distances._bounding_matrix import create_bounding_matrix
+from smartflat.engine.distances._rtwe import rtwe_alignment_path_with_costs
 
 from smartflat.features.symbolic_barycenter.visualization import (
     plot_chronogram_alignment,

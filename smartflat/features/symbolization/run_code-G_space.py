@@ -17,8 +17,6 @@ import random
 import time
 from collections import Counter
 
-import aeon
-
 #import umap.umap_ as umap
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt

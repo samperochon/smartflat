@@ -41,8 +41,6 @@ import random
 import time
 from collections import Counter
 
-import aeon
-
 import seaborn as sns
 from IPython.display import display
 from matplotlib.colors import ListedColormap
