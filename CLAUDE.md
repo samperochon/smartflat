@@ -155,8 +155,8 @@ This repo was created from the thesis-era `smartflat-thesis` codebase (archived 
 | 6 | Notebooks (all 7 notebooks NB01–NB07 filled with production code) | Done |
 | 7 | Polish (star imports replaced, TODOREMOVE cleaned, dead code removed) | Done |
 | — | NB00 Data Overview (`00_data_overview.ipynb`, 51 cells) + `DATA_INVENTORY.md` | Done |
+| 8 | Documentation (`README.md`, `NOTEBOOK_ARCHIVE.md`, CLAUDE.md update) | Done |
 
 ### Remaining
 
-- **Stage 8 — Documentation**: Create `README.md`, `NOTEBOOK_ARCHIVE.md`, update this file
-- **NB08 — Thesis Figures** (optional): Port figure-generation notebook from thesis repo
+- **NB08 — Thesis Figures** (optional): Port figure-generation notebook from thesis repo (currently a stub)
