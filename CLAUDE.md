@@ -154,9 +154,9 @@ This repo was created from the thesis-era `smartflat-thesis` codebase (archived 
 | 5 | Barycenter + Clinical (VAME bugs fixed, 80+ unused imports removed) | Done |
 | 6 | Notebooks (all 7 notebooks NB01–NB07 filled with production code) | Done |
 | 7 | Polish (star imports replaced, TODOREMOVE cleaned, dead code removed) | Done |
+| — | NB00 Data Overview (`00_data_overview.ipynb`, 51 cells) + `DATA_INVENTORY.md` | Done |
 
 ### Remaining
 
 - **Stage 8 — Documentation**: Create `README.md`, `NOTEBOOK_ARCHIVE.md`, update this file
-- **NB00 — Data Overview**: New notebook surveying available data structure and completeness
 - **NB08 — Thesis Figures** (optional): Port figure-generation notebook from thesis repo
