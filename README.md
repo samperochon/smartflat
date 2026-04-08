@@ -97,6 +97,8 @@ The codebase was refactored from the thesis-era `smartflat-thesis` repository (a
 
 ## See Also
 
+- [QUICKSTART.md](QUICKSTART.md) — 5-minute setup guide for new lab members
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Code style, development workflow, how to add new features
 - [CLAUDE.md](CLAUDE.md) — Developer reference: architecture, package structure, configuration patterns, development conventions
 - [DATA_INVENTORY.md](DATA_INVENTORY.md) — Complete inventory of the `data-gold-final/` data directory
 - [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) — Provenance mapping from thesis-era notebooks to current notebooks

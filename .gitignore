@@ -78,3 +78,13 @@ Thumbs.db
 notebooks-backups-*/
 cheetah_new_unmarked/
 playground/
+
+# Private research documents (thesis, papers — kept locally, not for sharing)
+associated-papers/
+
+# Binary / presentation files
+*.pdf
+*.key
+
+# Sandbox / experimental work
+sandbox/
