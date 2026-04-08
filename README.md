@@ -16,24 +16,6 @@ Requires **Python >= 3.10**.
 pip install -e ".[all,dev]"
 ```
 
-To install only specific modalities, use optional extras:
-
-| Extra | Dependencies | Use case |
-|-------|-------------|----------|
-| `video` | decord | Video frame decoding |
-| `audio` | librosa | Audio/speech processing |
-| `pose` | mediapipe | Hand landmarks and body pose |
-| `clustering` | coclust, lempel_ziv_complexity, pyentrp | Co-clustering and complexity metrics |
-| `stats` | pingouin | Statistical testing |
-| `annotation` | pigeon-jupyter | Interactive prototype annotation |
-| `web` | flask, jupyter_dash | Web-based visualization |
-| `all` | All of the above | Full installation |
-| `dev` | pytest, nbstripout, pre-commit | Development tools |
-
-```bash
-# Example: install core + video + audio only
-pip install -e ".[video,audio]"
-```
 
 ## Data Setup
 
