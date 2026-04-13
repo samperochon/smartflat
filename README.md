@@ -1,9 +1,3 @@
----
-noteId: "01c08e702fc711f1b60c85121fd90d06"
-tags: []
-
----
-
 # Smartflat
 
 Smartflat is a Python research framework for multimodal video analysis in healthcare settings, developed as part of the **SDS2 study** (Smartflat for Dysexecutive Syndrome Stratification) at Hopital National d'Instruction des Armees Percy, France. It processes video recordings from multiple camera sources (GoPro, Tobii eye-tracking glasses) to study activities of daily living, with a focus on detecting and characterizing dysexecutive syndromes through computational behavioral analysis.
