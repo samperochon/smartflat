@@ -12,11 +12,9 @@ Smartflat is a Python research and analysis framework for multimodal video analy
 
 The framework processes video recordings from multiple camera sources (GoPro, Tobii eye-tracking glasses) to study activities of daily living, with a focus on detecting and characterizing dysexecutive syndromes through computational behavioral analysis.
 
-**Thesis reference:** The scientific foundations are detailed in Sam Perochon's PhD thesis, chapters 4-6 (LaTeX sources in `associated-papers/`). A published paper on recursive prototyping is in `associated-papers/paper-chapter-5/`.
-
 ## Scientific Context
 
-### Study Design (Chapter 4)
+### Study Design
 - **Cohort:** 162 administrations from 122 unique participants (26 controls, 59 TBI, 37 RIL)
 - **Task:** Cooking task (baking chocolate cake per recipe)
 - **Recording:** 3 GoPro cameras (60fps) + Tobii Pro Glasses 2 (eye-tracking at 100Hz, video at 25fps)
@@ -24,13 +22,13 @@ The framework processes video recordings from multiple camera sources (GoPro, To
 
 ### Five Main Contributions
 
-| # | Contribution | Chapter | Key Modules |
-|---|---|---|---|
-| 1 | **Data preprocessing**: Raw multimodal recordings → VideoMAE-v2 latent sequences (D=1408) | Ch. 4 | `features/video/`, `features/consolidation/`, `datasets/` |
-| 2 | **Recursive prototyping**: Iterative cosine k-means (P=8 rounds, C=100), visual probing, HAC consolidation → ~55 validated prototypes | Ch. 5 | `features/symbolization/`, `engine/clustering.py` |
-| 3 | **Temporal segmentation**: Kernel change-point detection (PELT) with slope heuristic → ~274 segments/sequence | Ch. 5 | `engine/change_point_detection.py`, `configs/change_points_config.py` |
-| 4 | **Barycenter averaging**: Temporal-Wasserstein TWE distance + adapted DBA for symbolic sequences | Ch. 6 | `features/symbolic_barycenter/`, `engine/distances/` |
-| 5 | **Clinical analysis**: Group comparisons (Control/TBI/RIL), temporal distributions, descriptive statistics | Ch. 6 | `utils/utils_clinical.py`, notebooks |
+| # | Contribution | Key Modules |
+|---|---|---|
+| 1 | **Data preprocessing**: Raw multimodal recordings → VideoMAE-v2 latent sequences (D=1408) | `features/video/`, `features/consolidation/`, `datasets/` |
+| 2 | **Recursive prototyping**: Iterative cosine k-means (P=8 rounds, C=100), visual probing, HAC consolidation → ~55 validated prototypes | `features/symbolization/`, `engine/clustering.py` |
+| 3 | **Temporal segmentation**: Kernel change-point detection (PELT) with slope heuristic → ~274 segments/sequence | `engine/change_point_detection.py`, `configs/change_points_config.py` |
+| 4 | **Barycenter averaging**: Temporal-Wasserstein TWE distance + adapted DBA for symbolic sequences | `features/symbolic_barycenter/`, `engine/distances/` |
+| 5 | **Clinical analysis**: Group comparisons (Control/TBI/RIL), temporal distributions, descriptive statistics | `utils/utils_clinical.py`, notebooks |
 
 ### Ongoing / Incomplete Work
 - **Gaze processing**: `features/gaze/main.py` has `NotImplementedError` — Tobii data parsing exists in `datasets/dataset_gaze.py`
@@ -65,15 +63,15 @@ The framework processes video recordings from multiple camera sources (GoPro, To
   - `gaze/`: Tobii eye-tracking (INCOMPLETE)
   - `hands/` + `hands_processing/`: MediaPipe hand landmarks + temporal tracking
   - `skeleton/`: MediaPipe pose landmarks
-  - `symbolization/`: Recursive prototyping pipeline (Ch. 5) — clustering, annotation, HAC, inference
-  - `symbolic_barycenter/`: TWE distance + DBA barycenter averaging (Ch. 6)
+  - `symbolization/`: Recursive prototyping pipeline — clustering, annotation, HAC, inference
+  - `symbolic_barycenter/`: TWE distance + DBA barycenter averaging
 
 - **`engine/`**: Analysis engines
   - `change_point_detection.py`: KCP/PELT with slope heuristic
   - `clustering.py`: Cosine k-means (faiss), kernel k-means
   - `clustering_evaluation.py`: Silhouette, DBI, CHI
   - `builders.py`: Model/metrics factory functions
-  - `distances/`: Vendored elastic distance metrics for symbolic sequences (Ch. 6 contribution)
+  - `distances/`: Vendored elastic distance metrics for symbolic sequences
     - `_rtwe.py`: Registered TWE — TWE with precomputed prototype distance matrix (replaces Euclidean)
     - `_eshape_dtw.py`: Edit-Shape DTW using rTWE as inner cost
     - `_alignment_paths.py`, `_bounding_matrix.py`, `_utils.py`: Vendored from aeon (BSD-3)
@@ -140,7 +138,7 @@ python -m smartflat.features.hands.main
 
 ## Refactoring Status
 
-This repo was created from the thesis-era `smartflat-thesis` codebase (archived on GitHub, tag `v-thesis-final`).
+This repo was refactored from the original `smartflat-thesis` codebase (archived on GitHub, tag `v-thesis-final`).
 
 ### Completed Stages (March–April 2026)
 
@@ -159,4 +157,8 @@ This repo was created from the thesis-era `smartflat-thesis` codebase (archived 
 
 ### Remaining
 
-- **NB08 — Thesis Figures** (optional): Port figure-generation notebook from thesis repo (currently a stub)
+- **NB08 — Figures** (optional): Port figure-generation notebook from the archived repo (currently a stub)
+
+### Active Paper: Barycenter Averaging
+
+A standalone paper is in preparation on barycenter averaging. The paper has concrete code needs (baselines, unit tests, hyperparameter sweep, figure reproduction) documented in [PAPER_BRIDGE.md](PAPER_BRIDGE.md). Read that file before starting any barycenter-related work.

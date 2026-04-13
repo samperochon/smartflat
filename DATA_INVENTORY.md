@@ -22,21 +22,21 @@ data-gold-final/
 └── thumbnails/           # Video thumbnail caches for annotation tools
 ```
 
-| Directory | Status | Thesis Chapter | Description |
-|-----------|--------|----------------|-------------|
-| `cuisine/` | PRODUCTION | Ch. 4 | Participant folders with raw recordings and extracted features |
-| `dataframes/` | PRODUCTION | Ch. 4–6 | Metadata DataFrames, annotations, clinical scores |
-| `experiments/` | MIXED | Ch. 5–6 | Experiment results (clustering labels, distance matrices) |
-| `experiments_speech/` | EXPLORATORY | — | Speech diarization visualizations (not in thesis pipeline) |
-| `outputs/` | MIXED | Ch. 5 | Symbolization pipeline state and visualizations |
-| `thumbnails/` | SUPPORT | — | Thumbnail caches for pigeon annotation tool |
+| Directory | Status | Description |
+|-----------|--------|-------------|
+| `cuisine/` | PRODUCTION | Participant folders with raw recordings and extracted features |
+| `dataframes/` | PRODUCTION | Metadata DataFrames, annotations, clinical scores |
+| `experiments/` | MIXED | Experiment results (clustering labels, distance matrices) |
+| `experiments_speech/` | EXPLORATORY | Speech diarization visualizations (not in main pipeline) |
+| `outputs/` | MIXED | Symbolization pipeline state and visualizations |
+| `thumbnails/` | SUPPORT | Thumbnail caches for pigeon annotation tool |
 
 ---
 
 ## 1. Raw Recordings and Features — `cuisine/`
 
 **Status:** PRODUCTION  
-**Created by:** Manual data collection (raw) + feature extraction modules (Ch. 4)
+**Created by:** Manual data collection (raw) + feature extraction modules
 
 ### 1.1 Participant Folder Structure
 
@@ -68,7 +68,7 @@ Each participant folder contains standardized modality subfolders (created by `f
 
 ### 1.3 Feature Files Inside Modality Folders
 
-Feature extraction modules (Ch. 4) write outputs directly into modality folders. The primary modality is `Tobii/`:
+Feature extraction modules write outputs directly into modality folders. The primary modality is `Tobii/`:
 
 | Feature | File Pattern | Size (typical) | Module |
 |---------|-------------|-----------------|--------|
@@ -119,7 +119,7 @@ Contains `clustering-deployment/` and `clustering-deployment-kmeans-all/`. These
 #### Pigeon Annotations — `annotations/pigeon-annotations/`
 
 **Status:** PRODUCTION  
-**Created by:** Pigeon annotation tool during recursive prototyping (Ch. 5)
+**Created by:** Pigeon annotation tool during recursive prototyping
 
 Human annotators (samperochon, theoperochon) qualified cluster prototypes across 8 rounds. Structure:
 
@@ -214,7 +214,7 @@ Contains 60+ files including:
 ## 3. Experiments — `experiments/`
 
 **Status:** MIXED  
-**Created by:** Clustering engine, CPD engine, symbolization pipeline (Ch. 5–6)
+**Created by:** Clustering engine, CPD engine, symbolization pipeline
 
 General output path pattern (constructed in `features/symbolization/main.py`):
 ```
@@ -270,7 +270,7 @@ Each experiment_id folder follows:
 │   ├── ...
 │   └── round_8/
 │       ├── config.json
-│       ├── D_te_pc_gw_square_loss_128.npy  # Distance matrices (Ch. 6)
+│       ├── D_te_pc_gw_square_loss_128.npy  # Distance matrices
 │       ├── D_tf_pc_wasserstein-1_*.npy     # TWE distance matrices
 │       └── ...
 └── theoperochon/
@@ -387,7 +387,7 @@ Same experiment_id structure as `experiments/symbolization-gold/` (see Section 3
 
 - **Visualizations:** PNG files of distance matrices, cluster compositions, dendrograms
 - **Figure folders:** `figures-clusters/`, `figures-test/` for aggregated visualizations
-- **Barycenter outputs:** `barycenter/` subfolder in later rounds (Ch. 6)
+- **Barycenter outputs:** `barycenter/` subfolder in later rounds
 - **Subject-level analysis:** `clusters-subjects-rows/` in later rounds
 
 #### State Files (at `symbolization-gold/` root)
@@ -466,18 +466,18 @@ Early symbolization attempt containing `euclidean_subspace_projection/`. Superse
 
 | Path | Pipeline Stage |
 |------|----------------|
-| `cuisine/*/Tobii/` | Ch. 4 — Feature extraction |
-| `cuisine/*/GoPro1/` | Ch. 4 — Hand landmarks |
-| `dataframes/annotations/` | Ch. 5 — Prototype annotation |
-| `dataframes/clinical/` | Ch. 6 — Clinical analysis |
-| `dataframes/quality-control/` | Ch. 4 — Data validation |
-| `experiments/symbolization-gold/faissc_inference_symbolization/` | Ch. 5–6 — Final symbolization |
-| `experiments/symbolization-gold/faissc_refinement_symbolization/` | Ch. 5 — Prototype refinement |
-| `experiments/symbolization-gold/faissc_post_hf_symbolization/` | Ch. 5 — Post-annotation inference |
-| `experiments/change-point-detection-deployment-calibrated/` | Ch. 5 — Calibrated CPD |
-| `experiments/clustering-deployment-faiss-cosine/` | Ch. 5 — FAISS clustering |
-| `outputs/symbolization-gold/` | Ch. 5 — Pipeline state |
-| `outputs/gold-change-point-detection-prototypes-deployment/` | Ch. 5 — Lambda values |
+| `cuisine/*/Tobii/` | Feature extraction |
+| `cuisine/*/GoPro1/` | Hand landmarks |
+| `dataframes/annotations/` | Prototype annotation |
+| `dataframes/clinical/` | Clinical analysis |
+| `dataframes/quality-control/` | Data validation |
+| `experiments/symbolization-gold/faissc_inference_symbolization/` | Final symbolization |
+| `experiments/symbolization-gold/faissc_refinement_symbolization/` | Prototype refinement |
+| `experiments/symbolization-gold/faissc_post_hf_symbolization/` | Post-annotation inference |
+| `experiments/change-point-detection-deployment-calibrated/` | Calibrated CPD |
+| `experiments/clustering-deployment-faiss-cosine/` | FAISS clustering |
+| `outputs/symbolization-gold/` | Pipeline state |
+| `outputs/gold-change-point-detection-prototypes-deployment/` | Lambda values |
 
 ### Legacy / Exploratory Folders
 
@@ -494,7 +494,7 @@ Early symbolization attempt containing `euclidean_subspace_projection/`. Superse
 | `outputs/symbolization-gold/zsocre_iteration_1` | Typo variant |
 | `outputs/symbolization-gold/iteration_1` | Unnamed/unqualified |
 | `outputs/symbolization-gold/cuisine/` | Misplaced subfolder |
-| `experiments_speech/` | Not in thesis pipeline |
+| `experiments_speech/` | Not in main pipeline |
 | `thumbnails-cheetah/` | Non-cuisine task |
 | `thumbnails-pomme/` | Non-cuisine task |
 | `dataframes/backup_lego_cake_table_post_conversion.csv` | Lego task (non-cuisine) |
@@ -545,7 +545,7 @@ gold_dataset_df_backup_{YYYYMMDD}.csv
 
 ## Appendix C: Pipeline-to-Folder Mapping
 
-### Chapter 4 — Data Preprocessing and Feature Extraction
+### Data Preprocessing and Feature Extraction
 
 | Pipeline Step | Input | Output Location |
 |---------------|-------|-----------------|
@@ -557,7 +557,7 @@ gold_dataset_df_backup_{YYYYMMDD}.csv
 | Quality control | All features | `dataframes/quality-control/` |
 | Metadata generation | All features | `dataframes/persistent_metadata/` |
 
-### Chapter 5 — Recursive Prototyping and Temporal Segmentation
+### Recursive Prototyping and Temporal Segmentation
 
 | Pipeline Step | Config Class | Output Location |
 |---------------|-------------|-----------------|
@@ -571,7 +571,7 @@ gold_dataset_df_backup_{YYYYMMDD}.csv
 | Final inference | `SymbolicSourceInferenceGoldConfig` | `experiments/symbolization-gold/faissc_inference_symbolization/` |
 | Pipeline state & visualizations | all symbolic configs | `outputs/symbolization-gold/` |
 
-### Chapter 6 — Barycenter Averaging and Clinical Analysis
+### Barycenter Averaging and Clinical Analysis
 
 | Pipeline Step | Input | Output Location |
 |---------------|-------|-----------------|

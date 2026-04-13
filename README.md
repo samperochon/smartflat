@@ -31,19 +31,19 @@ The pipeline locates data via `get_data_root()` (in `smartflat/utils/utils_paths
 
 All notebooks are in `notebooks/` and follow the pipeline order:
 
-| # | Filename | Description | Chapter |
-|---|----------|-------------|---------|
-| 00 | `00_data_overview.ipynb` | Cohort statistics and dataset summary | — |
-| 01 | `01_data_preprocessing.ipynb` | Raw recordings to consolidated metadata | Ch. 4 |
-| 02 | `02_feature_extraction.ipynb` | VideoMAE-v2, WhisperX, MediaPipe extraction | Ch. 4 |
-| 03 | `03_recursive_prototyping.ipynb` | Cosine k-means, manual annotation, HAC consolidation | Ch. 5 |
-| 04 | `04_temporal_segmentation.ipynb` | Kernel change-point detection (PELT) with slope heuristic | Ch. 5 |
-| 05 | `05_symbolic_representation.ipynb` | Prototypes + segments assembled into symbolic sequences | Ch. 5 |
-| 06 | `06_barycenter_averaging.ipynb` | Temporal-Wasserstein distance + DBA barycenter averaging | Ch. 6 |
-| 07 | `07_clinical_analysis.ipynb` | Group comparisons: Control vs TBI vs RIL | Ch. 6 |
-| 08 | `08_thesis_figures.ipynb` | Thesis figure reproduction (stub) | Ch. 4–6 |
+| # | Filename | Description |
+|---|----------|-------------|
+| 00 | `00_data_overview.ipynb` | Cohort statistics and dataset summary |
+| 01 | `01_data_preprocessing.ipynb` | Raw recordings to consolidated metadata |
+| 02 | `02_feature_extraction.ipynb` | VideoMAE-v2, WhisperX, MediaPipe extraction |
+| 03 | `03_recursive_prototyping.ipynb` | Cosine k-means, manual annotation, HAC consolidation |
+| 04 | `04_temporal_segmentation.ipynb` | Kernel change-point detection (PELT) with slope heuristic |
+| 05 | `05_symbolic_representation.ipynb` | Prototypes + segments assembled into symbolic sequences |
+| 06 | `06_barycenter_averaging.ipynb` | Temporal-Wasserstein distance + DBA barycenter averaging |
+| 07 | `07_clinical_analysis.ipynb` | Group comparisons: Control vs TBI vs RIL |
+| 08 | `08_figures.ipynb` | Figure reproduction (stub) |
 
-See [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) for provenance mapping to the thesis-era source notebooks.
+See [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) for provenance mapping from the archived source notebooks.
 
 ## Scientific Context
 
@@ -57,13 +57,13 @@ See [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) for provenance mapping to the the
 
 ### Five Main Contributions
 
-| # | Contribution | Chapter | Description |
-|---|-------------|---------|-------------|
-| 1 | Data preprocessing | Ch. 4 | Raw multimodal recordings to VideoMAE-v2 latent sequences (D=1408) |
-| 2 | Recursive prototyping | Ch. 5 | Iterative cosine k-means (P=8 rounds, C=100), visual probing, HAC consolidation yielding ~55 validated prototypes |
-| 3 | Temporal segmentation | Ch. 5 | Kernel change-point detection (PELT) with slope heuristic yielding ~274 segments per sequence |
-| 4 | Barycenter averaging | Ch. 6 | Temporal-Wasserstein (TWE) distance + adapted DBA for symbolic sequences |
-| 5 | Clinical analysis | Ch. 6 | Group comparisons (Control/TBI/RIL), temporal distributions, descriptive statistics |
+| # | Contribution | Description |
+|---|-------------|-------------|
+| 1 | Data preprocessing | Raw multimodal recordings to VideoMAE-v2 latent sequences (D=1408) |
+| 2 | Recursive prototyping | Iterative cosine k-means (P=8 rounds, C=100), visual probing, HAC consolidation yielding ~55 validated prototypes |
+| 3 | Temporal segmentation | Kernel change-point detection (PELT) with slope heuristic yielding ~274 segments per sequence |
+| 4 | Barycenter averaging | Temporal-Wasserstein (TWE) distance + adapted DBA for symbolic sequences |
+| 5 | Clinical analysis | Group comparisons (Control/TBI/RIL), temporal distributions, descriptive statistics |
 
 ## Running Tests
 
@@ -71,11 +71,9 @@ See [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) for provenance mapping to the the
 python -m pytest tests/
 ```
 
-## Citation and Thesis Reference
+## Citation
 
-This framework supports the scientific contributions detailed in Sam Perochon's PhD thesis (Chapters 4–6). LaTeX sources for the thesis chapters and the published paper on recursive prototyping are available in `associated-papers/`.
-
-The codebase was refactored from the thesis-era `smartflat-thesis` repository (archived on GitHub, tag `v-thesis-final`).
+LaTeX sources for the associated publications and the published paper on recursive prototyping are available in `associated-papers/`.
 
 ## See Also
 
@@ -83,4 +81,4 @@ The codebase was refactored from the thesis-era `smartflat-thesis` repository (a
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Code style, development workflow, how to add new features
 - [CLAUDE.md](CLAUDE.md) — Developer reference: architecture, package structure, configuration patterns, development conventions
 - [DATA_INVENTORY.md](DATA_INVENTORY.md) — Complete inventory of the `data-gold-final/` data directory
-- [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) — Provenance mapping from thesis-era notebooks to current notebooks
+- [NOTEBOOK_ARCHIVE.md](NOTEBOOK_ARCHIVE.md) — Provenance mapping from archived source notebooks

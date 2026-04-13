@@ -4,11 +4,11 @@ tags: []
 
 ---
 
-# Notebook Archive — Thesis Provenance
+# Notebook Archive
 
-This document maps the 9 current notebooks (`notebooks/NB00–NB08`) back to the ~79 thesis-era source notebooks in the archived `smartflat-thesis` repository (GitHub tag `v-thesis-final`). The goal is to preserve the provenance chain so that any analysis in the current repo can be traced to its original notebook(s).
+This document maps the 9 current notebooks (`notebooks/NB00–NB08`) back to the ~79 archived source notebooks in the `smartflat-thesis` repository (GitHub tag `v-thesis-final`).
 
-All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
+All paths below are relative to the archived `smartflat-thesis` repository (`smartflat-thesis-local/notebooks/`).
 
 > **Note:** This mapping was reconstructed from filenames and notebook content. Some assignments are approximate — notebooks that explored multiple topics may appear under more than one current notebook.
 
@@ -28,7 +28,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB01 — Data Preprocessing
 
-**Current:** `01_data_preprocessing.ipynb` — Raw recordings to consolidated metadata (Ch. 4).
+**Current:** `01_data_preprocessing.ipynb` — Raw recordings to consolidated metadata.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -48,7 +48,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB02 — Feature Extraction
 
-**Current:** `02_feature_extraction.ipynb` — VideoMAE-v2, WhisperX, MediaPipe extraction (Ch. 4).
+**Current:** `02_feature_extraction.ipynb` — VideoMAE-v2, WhisperX, MediaPipe extraction.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -63,7 +63,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB03 — Recursive Prototyping
 
-**Current:** `03_recursive_prototyping.ipynb` — Cosine k-means, annotation, HAC consolidation (Ch. 5).
+**Current:** `03_recursive_prototyping.ipynb` — Cosine k-means, annotation, HAC consolidation.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -82,7 +82,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB04 — Temporal Segmentation
 
-**Current:** `04_temporal_segmentation.ipynb` — Kernel change-point detection with slope heuristic (Ch. 5).
+**Current:** `04_temporal_segmentation.ipynb` — Kernel change-point detection with slope heuristic.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -98,7 +98,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB05 — Symbolic Representation
 
-**Current:** `05_symbolic_representation.ipynb` — Prototypes + segments assembled into symbolic sequences (Ch. 5).
+**Current:** `05_symbolic_representation.ipynb` — Prototypes + segments assembled into symbolic sequences.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -115,7 +115,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB06 — Barycenter Averaging
 
-**Current:** `06_barycenter_averaging.ipynb` — TWE distance + DBA barycenter averaging (Ch. 6).
+**Current:** `06_barycenter_averaging.ipynb` — TWE distance + DBA barycenter averaging.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -130,7 +130,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## NB07 — Clinical Analysis
 
-**Current:** `07_clinical_analysis.ipynb` — Group comparisons: Control vs TBI vs RIL (Ch. 6).
+**Current:** `07_clinical_analysis.ipynb` — Group comparisons: Control vs TBI vs RIL.
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -147,9 +147,9 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ---
 
-## NB08 — Thesis Figures
+## NB08 — Figures
 
-**Current:** `08_thesis_figures.ipynb` — Thesis figure reproduction (stub).
+**Current:** `08_figures.ipynb` — Figure reproduction (stub).
 
 | Old Notebook | Description |
 |-------------|-------------|
@@ -162,7 +162,7 @@ All old notebook paths are relative to `smartflat-thesis-local/notebooks/`.
 
 ## Unmapped Notebooks
 
-The following thesis-era notebooks were not consolidated into any current notebook. They fall into three categories:
+The following archived notebooks were not consolidated into any current notebook. They fall into three categories:
 
 ### Infrastructure / HPC Setup
 
