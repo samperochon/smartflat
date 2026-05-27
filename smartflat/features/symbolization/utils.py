@@ -50,7 +50,7 @@ from sklearn.preprocessing import normalize
 
 from smartflat.configs.loader import get_complete_configs, import_config
 from smartflat.constants import progress_cols
-from smartflat.datasets.filter import filter_progress_cols
+# from smartflat.datasets.filter import filter_progress_cols 
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import load_embedding_dimensions
 from smartflat.engine.builders import build_model, compute_metrics

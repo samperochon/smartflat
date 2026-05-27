@@ -78,8 +78,13 @@ def _discover_artifacts(root_folder, task_names, modality_to_explore):
                         any(p.lower().endswith(ext) for ext in _VIDEO_EXTENSIONS)
                         and "hand_landmarks" not in p
                         and "skeleton_landmarks_plot" not in p
+                        # and "video_representations" not in p # added by adam, commented for safety  
                     )
                 ]
+
+                # # TODO : To remove
+                # print(video_paths)
+
                 videos_dict = collect_videos(video_paths, videos_dict)
 
                 # Video representations (VideoMAE-v2)

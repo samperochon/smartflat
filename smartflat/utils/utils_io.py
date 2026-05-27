@@ -813,6 +813,27 @@ def print_nvidia_smi_output():
 def fetch_output_path(video_path, model_name):
     """Provide output file name associated with a model for a given video sample."""
     video_name, _, _, _ = parse_path(video_path)
+
+    # if parse_path outputs a float (ex: NaN) instead of a str
+    if not isinstance(video_name, str):
+        base_name = os.path.basename(video_path)  # ex: "video_representations_VideoMAEv2_merged_video.npy"
+        name_no_ext = os.path.splitext(base_name)[0]  # ex: "video_representations_VideoMAEv2_merged_video"
+
+        prefixes = [
+            "video_representations_VideoMAEv2_",
+            "speech_recognition_diarization_whisperx_",
+            "speech_representations_multilingual_",
+            "hand_landmarks_mediapipe_",
+            "skeleton_landmarks_",
+            "tracking_hand_landmarks_",
+        ]
+
+        video_name = name_no_ext
+        for prefix in prefixes:
+            if video_name.startswith(prefix):
+                video_name = video_name.replace(prefix, "", 1)
+                break
+
     # TODOFIX print(video_name, model_name)
 
     if model_name == "vit_giant_patch14_224":
@@ -847,18 +868,18 @@ def fetch_output_path(video_path, model_name):
         )
 
     elif model_name == 'hand_landmarks_mediapipe':
-        #FIXME: note that the GoPro rows are being populated while they don't have hand landmarks processing for now
+        # FIXME: note that the GoPro rows are being populated while they don't have hand landmarks processing for now
         name = 'hand_landmarks_mediapipe'
         return os.path.join(os.path.dirname(video_path), name + '_' + video_name + '.json')
-    
+
     elif model_name == 'skeleton_landmarks_mediapipe':
         name = 'skeleton_landmarks'
         return os.path.join(os.path.dirname(video_path), name + '_' + video_name + '.json')
-                
+
     elif model_name == 'tracking_hand_landmarks_v1':
         name = 'tracking_hand_landmarks'
         return os.path.join(os.path.dirname(video_path), name + '_' + video_name + '.json')
-        
+
     else:
         raise NotImplementedError
 
@@ -1195,7 +1216,7 @@ def parse_participant_id(string):
         task_num, diag_num, trigram, date = np.nan, np.nan, np.nan, np.nan
 
     return pd.Series([task_num, diag_num, trigram, date])
-    
+
 def fetch_root_dir(output_path):
     return os.path.dirname(os.path.dirname(os.path.dirname(output_path)))
 

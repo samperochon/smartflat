@@ -49,7 +49,7 @@ from umap import UMAP
 
 from smartflat.configs.loader import import_config
 from smartflat.constants import progress_cols
-from smartflat.datasets.filter import filter_progress_cols
+# from smartflat.datasets.filter import filter_progress_cols
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import add_pca, add_umap, use_light_dataset
 from smartflat.engine.builders import compute_metrics

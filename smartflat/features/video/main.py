@@ -14,7 +14,7 @@ import sys
 import time
 
 # NOTE: Do not comment `import models`, it is used to register models
-import models  # noqa: F401
+from . import models  # noqa: F401
 import numpy as np
 import pandas as pd
 import torch

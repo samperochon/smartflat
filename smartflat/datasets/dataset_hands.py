@@ -27,7 +27,7 @@ class HandsDataset(SmartflatDatasetBase):
         subject_filtering: str = None,
     ):
         self.modality = modality
-        self.scenario=scenario
+        self.scenario = scenario 
         self.subject_filtering = subject_filtering
         
         
