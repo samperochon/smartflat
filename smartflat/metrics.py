@@ -54,7 +54,7 @@ class Metrics:
                     gt_stop_frame=None, pred_stop_frame=None, gt_cpt=None, pred_cpt=None, overlap_list=[]):
         
         """Calculate the precision/recall of an estimated segmentation compared
-        with the true segmentation.=, taking into account the labels ofeach segments. 
+        with the true segmentation.=, taking into account the labels of each segments. 
 
         Args:
             gt_label (list): list of the label of each regimes (true partition).

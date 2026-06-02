@@ -1054,10 +1054,9 @@ def parse_path(path):
 
         elif "skeleton_landmarks_flag" in filename:
             video_name = filename.split("_skeleton_landmarks_flag")[0]
-            
+
         elif "tracking_hand_landmarks_flag" in filename:
             video_name = filename.split("_tracking_hand_landmarks_flag")[0]
-            
 
         elif "hand_landmarks_flag" in filename:
             video_name = filename.split("_hand_landmarks_flag")[0]
@@ -1067,11 +1066,19 @@ def parse_path(path):
 
     else:
         try:
+
+            # filename, modality, participant_id, task = (
+            #     path.split("/")[-1].split(".")[0],
+            #     path.split("/")[-2],
+            #     path.split("/")[-3],
+            #     path.split("/")[-4],
+            # )
+
             filename, modality, participant_id, task = (
-                path.split("/")[-1].split(".")[0],
-                path.split("/")[-2],
-                path.split("/")[-3],
-                path.split("/")[-4],
+                path.split("\\")[-1].split(".")[0],
+                path.split("\\")[-2],
+                path.split("\\")[-3],
+                path.split("\\")[-4],
             )
         except:
             print(f"Error parsing path: {path}")
@@ -1103,9 +1110,9 @@ def parse_path(path):
             video_name = (
                 os.path.basename(path).split("skeleton_landmarks_")[1].split(".json")[0]
             )
-            
+
         elif filename.startswith("tracking_hand_landmarks"):
-            
+
             try:
                 video_name = (
                     os.path.basename(path)
@@ -1116,8 +1123,6 @@ def parse_path(path):
                 red(path)
                 red(filename)
                 video_name='ERROR'
-                
-
 
         elif filename.startswith("hand_landmarks"):
             video_name = (
@@ -1125,11 +1130,10 @@ def parse_path(path):
                 .split("hand_landmarks_mediapipe_")[1]
                 .split(".json")[0]
             )
-                
 
         else:
             video_name = filename
-            
+
         if task not in available_tasks:
             pass#rint(f'Error: {task} not in available tasks.')
         if modality not in available_modality:

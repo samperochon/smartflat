@@ -63,6 +63,7 @@ def _discover_artifacts(root_folder, task_names, modality_to_explore):
         print(f"Exploring {task} with {len(sbj_folders)} participants.")
 
         for sbj_folder in sbj_folders:
+            print(f"sbj_folder : {sbj_folder}")
             participant_id = os.path.basename(sbj_folder)
 
             for modality in modality_to_explore:
@@ -72,6 +73,10 @@ def _discover_artifacts(root_folder, task_names, modality_to_explore):
                 video_paths = glob(
                     os.path.join(root_folder, task, sbj_folder, modality, "*")
                 )
+
+                # TODO : To remove
+                print(f"video_paths before filter :{video_paths}")
+
                 video_paths = [
                     p for p in video_paths
                     if (
@@ -81,9 +86,6 @@ def _discover_artifacts(root_folder, task_names, modality_to_explore):
                         # and "video_representations" not in p # added by adam, commented for safety  
                     )
                 ]
-
-                # # TODO : To remove
-                # print(video_paths)
 
                 videos_dict = collect_videos(video_paths, videos_dict)
 
@@ -352,7 +354,6 @@ def generate_video_metadata(
 
 
     return df_video
-
 
 
 # Create all-from-one registration file functionality (allow to search for other features presences fronm a single file)
