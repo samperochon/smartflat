@@ -27,6 +27,7 @@ LOCAL_MACHINE_NAMES = [
     # Current machines
     "sjp49.borelli.ens-paris-saclay.fr",
     "sjp49.home",
+    "MacBook-Pro-101.local",
     "sjp49.local",
     "sjp49.Still-Gone.home",
     "macbook-pro-de-sam.home",
@@ -51,6 +52,7 @@ LOCAL_MACHINE_NAMES = [
     "pclnrs103.biomedicale.univ-paris5.fr.dhe.duke.edu",
     "pclnrs219.biomedicale.univ-paris5.fr.dhe.duke.edu",
     "w-155-132.wfer.ens-paris-saclay.fr.dhe.duke.edu",
+    'MacBook-Pro-101.local.dhe.duke.edu'
 ]
 
 

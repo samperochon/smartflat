@@ -7,4 +7,5 @@ Assessment of dysexecutive syndromes"):
 - Edit-Shape DTW with rTWE cost matrix for symbolic sequence alignment: ``main``
 - Hierarchical community detection and Markov chain analysis: ``hierarchical_states_transitions``
 - Alignment path, cost matrix, and distance distribution visualization: ``visualization``
+- Baseline barycenter methods for paper comparison: ``baselines``
 """

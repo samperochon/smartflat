@@ -166,16 +166,16 @@ def _rtwe_cost_matrix(
         for j in range(1, y_size):
             if bounding_matrix[i - 1, j - 1]:
                 # Deletion in x: cost of transitioning within x
-                del_x = precomputed_distances[x[0, i - 1], x[0, i]]
+                del_x = precomputed_distances[int(x[0, i - 1]), int(x[0, i])]
                 del_x = cost_matrix[i - 1, j] + del_x + del_add
 
                 # Deletion in y: cost of transitioning within y
-                del_y = precomputed_distances[y[0, j - 1], y[0, j]]
+                del_y = precomputed_distances[int(y[0, j - 1]), int(y[0, j])]
                 del_y = cost_matrix[i, j - 1] + del_y + del_add
 
                 # Match: cost of aligning x[i] with y[j]
-                match_same = precomputed_distances[x[0, i], y[0, j]]
-                match_previous = precomputed_distances[x[0, i - 1], y[0, j - 1]]
+                match_same = precomputed_distances[int(x[0, i]), int(y[0, j])]
+                match_previous = precomputed_distances[int(x[0, i - 1]), int(y[0, j - 1])]
                 match = (
                     cost_matrix[i - 1, j - 1]
                     + match_same
@@ -357,7 +357,7 @@ def rtwe_alignment_path_with_costs(
 
     path = compute_min_return_path(cost_matrix)
     path_costs = [cost_matrix[i, j] for (i, j) in path]
-    distance = cost_matrix[x.shape[-1] - 2, y.shape[-1] - 2]
+    distance = cost_matrix[x.shape[-1] - 1, y.shape[-1] - 1]
 
     return distance, cost_matrix, path, path_costs
 

@@ -1,0 +1,16 @@
+# =============================================================================
+# MediaPipe landmark-extraction environment: hands + body pose  (Python 3.10)
+# Setup:
+#   python3.10 -m venv .venv-pose && source .venv-pose/bin/activate
+#   pip install -e . --no-deps        # make `smartflat` importable (or: export PYTHONPATH=$PWD)
+#   pip install -r requirements-pose.txt
+# =============================================================================
+
+mediapipe>=0.9,<0.11        # hand + pose landmarks (features/hands/main.py, features/skeleton/main.py)
+decord>=0.6                 # video frame decoding (source build on macOS)
+opencv-python>=4.5,<5
+
+# --- core libs the modules import ---
+numpy>=1.23,<2.0            # mediapipe constrains numpy<2
+pandas>=1.5
+tqdm>=4.60

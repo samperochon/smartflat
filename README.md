@@ -10,11 +10,39 @@ Smartflat is a Python research framework for multimodal video analysis in health
 
 ## Installation
 
-Requires **Python >= 3.10**.
+Requires **Python 3.10–3.12**. The default install is the **analysis environment** — the
+lightweight scientific stack used for the notebooks and all downstream analysis (CPU is
+enough; no GPU required):
 
 ```bash
-pip install -e ".[all,dev]"
+pip install -e ".[analysis,dev]"
 ```
+
+For byte-for-byte reproducibility, install the pinned set captured from a verified fresh
+install instead:
+
+```bash
+pip install -r requirements-lock.txt && pip install -e . --no-deps
+```
+
+### Environments
+
+GPU **feature extraction** (VideoMAE, WhisperX, MediaPipe) uses heavier, mutually
+incompatible dependencies and therefore lives in **separate** environments — one per
+module, mirroring the original project's conda envs. Install each in its own
+venv/conda env, *not* alongside the analysis env:
+
+| Purpose | Install | Notes |
+|---|---|---|
+| Analysis + notebooks (default) | `pip install -e ".[analysis,dev]"` | CPU; everything NB00–08 needs |
+| VideoMAE extraction | `pip install -r requirements-video.txt` | GPU; `timm==0.4.12`, torch 1.x |
+| WhisperX speech | `pip install -r requirements-audio.txt` | GPU, CUDA 11.8 + system ffmpeg |
+| MediaPipe hands/pose | `pip install -r requirements-pose.txt` | pins protobuf / numpy<2 |
+
+The `analysis` extra bundles the granular extras `clustering`, `stats`, `barycenter`,
+`annotation`, and `web` — install a subset for a lighter footprint, e.g.
+`pip install -e ".[barycenter]"`. On the HPC, the `scripts/compute/*.sh` jobs expect conda
+envs named `smartflat`, `videomae`, `whisperx`, `mediapipe`, and `temporal_segmentation`.
 
 
 ## Data Setup

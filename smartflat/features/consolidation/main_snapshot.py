@@ -8,9 +8,11 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from decord import VideoReader, bridge, cpu
-
-bridge.set_bridge('native')
+try:  # optional dependency: only needed for video-frame access, not the analysis path
+    from decord import VideoReader, bridge, cpu
+    bridge.set_bridge('native')
+except ImportError:
+    VideoReader = bridge = cpu = None
 
 
 from smartflat.datasets.loader import get_dataset

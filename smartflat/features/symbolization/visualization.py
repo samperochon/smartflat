@@ -41,15 +41,22 @@ from scipy.stats import gamma, gaussian_kde, kstest, norm, poisson, skew
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 
 
-from decord import bridge
 from scipy.sparse import csgraph
 from sklearn.cluster import SpectralClustering
 from sklearn.decomposition import PCA
-from umap import UMAP
+
+try:  # optional dependency: only needed for video-frame access, not the analysis path
+    from decord import bridge
+except ImportError:
+    bridge = None
+try:  # ships in the `clustering` extra; absent in a core-only install
+    from umap import UMAP
+except ImportError:
+    UMAP = None
 
 from smartflat.configs.loader import import_config
 from smartflat.constants import progress_cols
-from smartflat.datasets.filter import filter_progress_cols
+from smartflat.utils.utils_coding import filter_progress_cols
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import add_pca, add_umap, use_light_dataset
 from smartflat.engine.builders import compute_metrics
@@ -78,7 +85,8 @@ from smartflat.utils.utils_visualization import (
     plot_per_cat_x_cont_y_distributions,
 )
 
-bridge.set_bridge('native')
+if bridge is not None:
+    bridge.set_bridge('native')
 
 
 def plot_frame_votes(frame_votes_list):

@@ -40,7 +40,10 @@ import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as sch
 import seaborn as sns
-from decord import bridge
+try:  # optional dependency: only needed for video-frame access, not the analysis path
+    from decord import bridge
+except ImportError:
+    bridge = None
 from IPython.display import display
 from scipy.spatial.distance import squareform
 from sklearn.decomposition import PCA
@@ -50,9 +53,9 @@ from sklearn.preprocessing import normalize
 
 from smartflat.configs.loader import get_complete_configs, import_config
 from smartflat.constants import progress_cols
-from smartflat.datasets.filter import filter_progress_cols
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import load_embedding_dimensions
+from smartflat.utils.utils_coding import filter_progress_cols
 from smartflat.engine.builders import build_model, compute_metrics
 from smartflat.utils.utils import pairwise, upsample_sequence
 from smartflat.utils.utils_coding import blue, green
@@ -80,9 +83,12 @@ from smartflat.utils.utils_visualization import plot_gram
 
 
 def fix_clinical_diagnosis(df):
-    
-    
-    df['group_folder'] = df['diag_number'].apply(lambda x: 1 if 'P' in x else 0)
+    # Extract diagnosis group from participant_id (contains 'P' for patient, absent for control)
+    # Handle potential merge indicator column by resetting index if needed
+    if '_merge' in df.columns:
+        df = df.drop('_merge', axis=1)
+
+    df['group_folder'] = df['participant_id'].apply(lambda x: 1 if 'P' in str(x) else 0)
 
     
     df.loc[df['group_folder'] == 0, 'pathologie'] = 'HEALTHY'

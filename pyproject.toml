@@ -7,90 +7,104 @@ name = "smartflat"
 version = "0.1.0"
 description = "Multimodal video analysis framework for studying activities of daily living in clinical settings (Smartflat/SDS2 project)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = {text = "MIT"}
 authors = [
     {name = "Sam Perochon"},
 ]
 
 dependencies = [
-    # Core scientific computing
-    "numpy>=1.20,<2",
-    "scipy>=1.5",
-    "pandas>=1.1",
-    "scikit-learn>=0.23",
+    # Core scientific stack (analysis + notebooks; CPU torch is sufficient).
+    # Ranges are bounded so a fresh install resolves to a tested, working set;
+    # exact versions are captured in requirements-lock.txt.
+    "numpy>=1.23,<2.0",            # <2 kept for aeon/tslearn/numba-era compatibility
+    "scipy>=1.9,<1.14",
+    "pandas>=1.5,<2.3",
+    "scikit-learn>=1.1,<1.6",
+    "joblib>=1.2,<2",             # parallelism in engine/ (also a scikit-learn dependency)
+    "numba>=0.58,<0.61",          # JIT for the vendored elastic distances (engine/distances/)
+    "networkx>=2.8,<4",           # state-transition graphs (engine/builders, symbolic_barycenter)
+    "sympy>=1.10,<2",             # change-point slope-heuristic curve fitting (engine/)
 
-    # Deep learning
-    "torch>=1.13",
-    "torchmetrics>=0.11",
-    "timm>=0.4.12",
+    # Deep learning (CPU build is enough for analysis: tensor I/O, clustering, metrics)
+    "torch>=2.0,<2.5",
+    "torchmetrics>=0.11,<1.5",
+    # NOTE: timm is NOT a core dependency. VideoMAE extraction needs timm==0.4.12,
+    # which is incompatible with the modern stack — see requirements-video.txt.
 
-    # Video processing (decord requires source build on macOS — see optional deps)
-    "opencv-python>=3.4",
-    "Pillow>=9.0",
+    # Image/array I/O used across the analysis code (cv2 in symbolization/consolidation)
+    "opencv-python>=4.5,<5",
+    "Pillow>=9.0,<11",
 
     # Change point detection
-    "ruptures>=1.1",
+    "ruptures>=1.1,<2",
 
     # Visualization
-    "matplotlib>=3.4",
-    "seaborn>=0.12",
-    "plotly>=5.0",
+    "matplotlib>=3.5,<4",
+    "seaborn>=0.12,<0.14",
+    "plotly>=5.0,<6",
     "tqdm>=4.60",
 
-    # Optimal transport (for Wasserstein distances)
-    "POT",
+    # Optimal transport (Wasserstein / barycenter)
+    "POT>=0.9,<0.10",
 
     # Notebook / interactive support
     "nbformat>=5.0",
-    "ipython>=8.0",
+    "ipython>=8.0,<9",
 
     # Configuration & utilities
     "simple_colors",
-    "jinja2>=3.0",
+    "jinja2>=3.0,<4",
 ]
 
 [project.optional-dependencies]
-# Video decoding (requires source build on macOS: pip install decord)
-video = [
-    "decord>=0.6",
-]
-# Audio/speech processing
-audio = [
-    "librosa>=0.8",
-]
-# Hand/skeleton landmark detection
-pose = [
-    "mediapipe>=0.9",
-]
-# Co-clustering analysis
+# ---------------------------------------------------------------------------
+# Analysis extras: all CPU-friendly and co-resolvable with the core stack above.
+# GPU feature-extraction deps (VideoMAE / WhisperX / MediaPipe) are intentionally
+# NOT here — they are mutually incompatible and live in the per-module files
+# requirements-video.txt / requirements-audio.txt / requirements-pose.txt.
+# ---------------------------------------------------------------------------
+
+# Symbolization / clustering analysis helpers.
+# (Dropped `coclust` — removed from PyPI and never imported — and `lempel_ziv_complexity`,
+#  which is likewise never imported in the codebase.)
 clustering = [
-    "coclust",
-    "lempel_ziv_complexity",
-    "pyentrp",
+    "pyentrp>=0.8,<1.0",         # sample entropy; <1.0 keeps the ent.sample_entropy(...) API (utils.py)
+    "umap-learn>=0.5,<0.6",      # UMAP embeddings (features/symbolization/visualization.py)
+    "fastcluster>=1.2,<2",       # fast hierarchical clustering (features/symbolization/co_clustering.py)
+    "hdbscan>=0.8.33",           # density-based clustering (features/symbolization/co_clustering.py)
+    "statsmodels>=0.13,<0.15",   # temporal-distribution estimation (symbolization)
 ]
 # Statistical analysis
 stats = [
-    "pingouin>=0.4",
+    "pingouin>=0.5,<0.6",
+]
+# Barycenter baselines (paper comparison)
+barycenter = [
+    "aeon>=0.8,<0.12",
+    "tslearn>=0.6,<0.7",
+    "python-Levenshtein>=0.20",
 ]
 # Annotation tools
 annotation = [
     "pigeon-jupyter",
 ]
-# Web visualization
+# Web visualization (flask pinned: jupyter_dash breaks on Flask 3.x)
 web = [
-    "flask>=2.1",
+    "flask>=2.1,<2.3",
     "jupyter_dash",
-]
-# All optional dependencies
-all = [
-    "smartflat[video,audio,pose,clustering,stats,annotation,web]",
 ]
 # Development tools
 dev = [
     "pytest>=7.0",
     "nbstripout",
     "pre-commit",
+]
+# Everything a colleague needs for analysis + notebooks (NO GPU extraction deps).
+# Replaces the old `all` extra, which forced incompatible extraction deps into a
+# single resolve and could not install.
+analysis = [
+    "smartflat[clustering,stats,barycenter,annotation,web]",
 ]
 
 [tool.setuptools.packages.find]

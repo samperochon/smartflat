@@ -11,8 +11,8 @@ Guide for lab members contributing code or analysis to the Smartflat project.
 ## Development setup
 
 ```bash
-# Editable install with all dependencies
-pip install -e ".[all,dev]"
+# Editable install of the analysis environment (notebooks + analysis; CPU only)
+pip install -e ".[analysis,dev]"
 
 # Install pre-commit hooks (strips notebook outputs on commit)
 pre-commit install

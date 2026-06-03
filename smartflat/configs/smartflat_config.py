@@ -53,7 +53,8 @@ class BaseSmartflatConfig(BaseConfig):
     # --------- Change-point detection estimation --------
     #change_point_experiment_ids = ['Tobii_lambda_1', 'Tobii_lambda_2']
 
-    join_len: int = .5  # [duration in seconds]
+    join_len: float = .5  # [duration in seconds]
+    discard_len: float = .5  # [duration in seconds]
 
     # --------- Model identifiers ---------
     video_model_name: str = "vit_giant_patch14_224"

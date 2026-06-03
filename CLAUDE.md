@@ -113,8 +113,9 @@ Data is organized by task and participant:
 ## Commands
 
 ```bash
-# Install (development mode)
-pip install -e ".[all,dev]"
+# Install the analysis environment (notebooks + analysis; CPU only). Python 3.10–3.12.
+pip install -e ".[analysis,dev]"
+# Or reproduce exact versions: pip install -r requirements-lock.txt && pip install -e . --no-deps
 
 # Run tests
 python -m pytest tests/
@@ -122,7 +123,9 @@ python -m pytest tests/
 # Set data root (required on new machines)
 export SMARTFLAT_DATA_ROOT=/path/to/data-gold-final
 
-# Feature extraction (on HPC)
+# Feature extraction (on HPC) — each needs its OWN environment, NOT the analysis env:
+#   requirements-video.txt (timm==0.4.12, torch 1.x) | requirements-audio.txt (WhisperX,
+#   CUDA 11.8 + ffmpeg) | requirements-pose.txt (MediaPipe). See README "Environments".
 python -m smartflat.features.video.main
 python -m smartflat.features.skeleton.main
 python -m smartflat.features.hands.main
@@ -131,10 +134,11 @@ python -m smartflat.features.hands.main
 ## Development Conventions
 
 - **Imports**: Always use `from smartflat.xxx import yyy` — no `sys.path` manipulation
-- **Package install**: Use `pip install -e .` for development
+- **Package install**: Use `pip install -e ".[analysis,dev]"` for development. Core deps use bounded version ranges; `requirements-lock.txt` holds the exact verified pins. GPU extraction deps are kept out of the package and live in `requirements-{video,audio,pose}.txt`.
 - **Notebooks**: Strip outputs before committing (`nbstripout` pre-commit hook)
 - **Configs**: All experiment parameters go in config classes, not hardcoded
 - **Data paths**: Use `get_data_root()` or `SMARTFLAT_DATA_ROOT`, never hardcoded paths
+- **Notebook creation**: Always enable autoreload of imports in case changes happened
 
 ## Refactoring Status
 
