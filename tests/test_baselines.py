@@ -13,6 +13,7 @@ from smartflat.features.symbolic_barycenter.baselines import (
     barycenter_edit_median,
     barycenter_k_medoid,
     barycenter_majority_voting,
+    barycenter_mode_dba,
     barycenter_soft_dtw,
     barycenter_wasserstein,
     baseline_significance_tests,
@@ -20,6 +21,7 @@ from smartflat.features.symbolic_barycenter.baselines import (
     dist_dtw,
     dist_edit,
     dist_hamming,
+    dist_neg_pmatch,
     dist_rtwe,
     dist_soft_dtw,
     dist_wasserstein_hist,
@@ -27,6 +29,7 @@ from smartflat.features.symbolic_barycenter.baselines import (
     evaluate_baselines,
     make_patient_control_labels,
     ordinal_cost_matrix,
+    pmatch_to_barycenter,
     project_real_to_symbolic,
 )
 
@@ -369,3 +372,44 @@ class TestSignificance:
         out = baseline_significance_tests(self._df(), reference='tw_twe')
         row = out.set_index('method').loc['tie']
         assert not bool(row['significant'])
+
+
+# ---------------------------------------------------------------------------
+# Mode-based DBA + p_match feature (categorical-correct proposed method)
+# ---------------------------------------------------------------------------
+
+
+class TestModeDBA:
+    def test_output_shape_and_symbols(self, X_sym, D5):
+        b = barycenter_mode_dba(X_sym, D5, nu=1e-3, lmbda=1.0, max_iter=3)
+        assert b.ndim == 1
+        assert b.dtype.kind in "iu"
+        assert b.min() >= 0 and b.max() < D5.shape[0]
+
+    def test_single_sequence_identity(self, X_sym, D5):
+        b = barycenter_mode_dba(X_sym[:1], D5, nu=1e-3, lmbda=1.0, max_iter=3)
+        assert np.array_equal(b, X_sym[0])
+
+    def test_modes_are_observed_symbols(self, D5):
+        # every barycenter symbol must come from the input alphabet that occurs
+        X = np.array([[0, 1, 2, 3, 4] * 4, [0, 1, 2, 3, 4] * 4, [1, 1, 2, 2, 3] * 4],
+                     dtype=np.int64)
+        b = barycenter_mode_dba(X, D5, nu=1e-3, lmbda=1.0, max_iter=5)
+        assert set(np.unique(b)).issubset(set(np.unique(X)))
+
+
+class TestPMatch:
+    def test_self_match_is_one(self, X_sym, D5):
+        # a sequence aligned to itself matches every position
+        assert pmatch_to_barycenter(X_sym[0], X_sym[0], D5, nu=1e-3, lmbda=1.0) == pytest.approx(1.0)
+
+    def test_pmatch_in_unit_interval(self, X_sym, D5):
+        for i in range(len(X_sym)):
+            for j in range(len(X_sym)):
+                p = pmatch_to_barycenter(X_sym[i], X_sym[j], D5, nu=1e-3, lmbda=1.0)
+                assert 0.0 <= p <= 1.0
+
+    def test_neg_pmatch_is_negative_similarity(self, X_sym, D5):
+        # dist_neg_pmatch == -pmatch, so identity gives -1 (closest possible)
+        d = dist_neg_pmatch(X_sym[0], X_sym[0], D5, nu=1e-3, lmbda=1.0)
+        assert d == pytest.approx(-1.0)

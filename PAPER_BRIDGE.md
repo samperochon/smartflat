@@ -14,6 +14,21 @@ tags: []
 
 ---
 
+## ⚠️ REPRODUCTION FINDINGS (server run, 2026-06-04) — READ BEFORE TOUCHING tab:baselines
+
+Full record: **[RESULTS_HANDOFF_barycenters.md](RESULTS_HANDOFF_barycenters.md)**. NB06/NB06b were fixed and run end-to-end on the real data (`SymbolicSourceInferenceGoldConfig`, round 8). Key outcomes:
+
+- **NB06 was previously dead** on non-HPC machines (`aeon.distances._rtwe` import → `HAS_AEON=False` skipped everything) and the `D_twe` regression dropped `D_G`. Both fixed; symbol `-1` noise remap + `D_G` restriction to occurring symbols added; grid search re-run (δ=0.3 confirmed, ν plateau, λ=0.5).
+- **The proposed TW-TWE + DBA is NOT the best method on the K-space representation.** Faithful 10×3 AUCs: majority-voting wins Patient-vs-Control (0.74, **significantly** beats proposed, BH p=0.035); Wasserstein histogram wins RIL-vs-Control (0.84); edit-median wins TBI-vs-RIL (0.62). Proposed (mode-DBA + p_match) = 0.58/0.76/0.54.
+- **Root cause:** the group signal is **symbol frequency** — a plain histogram reproduces the paper (0.84/0.57/0.80). The alignment-based barycenter does not improve on it. Also, **aeon's TWE-DBA mean-averages nominal symbol indices** (categorically wrong); a new `barycenter_mode_dba` (mode update) was added — it helps but still does not beat the frequency baselines.
+- **Two ablations DO support the design** (now in the harness): mode-DBA ≫ mean-DBA (BH p=0.035) and Wasserstein cost ≫ ordinal cost.
+- **The paper's 0.77/0.84 headline almost certainly uses the consolidated G≈28 semantic vocabulary** (A–J clinical scheme subcategories from the prototype visual annotation; *not* a column in the symbolization dataframe — the available label columns are all 76–178 fine prototypes). `tab:baselines` must be reproduced on that vocabulary before filling.
+- **Open work** (kickoff prompts in RESULTS_HANDOFF §11): (1) reproduce on G≈28 + audit/improve TW-TWE+DBA vs majority voting; (2) consolidate a paper-improvement TODO (datasets/algorithms for a tier-1 venue) from the post-thesis docs.
+
+Manuscript edits made (server copy): 4 inert `% REPRODUCTION FLAG` comments + 2 new figures; **no rendered content changed**.
+
+---
+
 ## 1. What the paper needs from this repo
 
 All items below correspond to the paper's "Session 5" backlog. Sub-sessions 5a, 5b, 5c, 5d, 5e, and 5f complete.

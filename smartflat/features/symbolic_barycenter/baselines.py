@@ -462,6 +462,64 @@ def barycenter_majority_voting(X_symbolic):
     return result
 
 
+def barycenter_mode_dba(X_symbolic, D_G, nu=0.001, lmbda=1.0, max_iter=10, random_state=None):
+    """Mode-based DBA barycenter for categorical symbolic sequences.
+
+    Mean-based DBA averages nominal prototype indices (e.g. symbols 2 and 70 -> 36),
+    which is meaningless for categorical data and erases the symbol-frequency signal.
+    Mode-based DBA instead warps every sequence to the current reference via the rTWE
+    alignment path and takes the per-position MODE of the aligned symbols, iterating to
+    convergence. The reference is initialised to the within-group rTWE medoid.
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length).
+    D_G : np.ndarray of shape (G, G)
+        Ground-cost matrix used for the rTWE alignment.
+    nu, lmbda : float
+        rTWE stiffness / edit penalty.
+    max_iter : int
+        Maximum number of mode-DBA refinement iterations.
+    random_state : int or None
+        Unused; kept for a uniform ``build(X, seed)`` signature.
+
+    Returns
+    -------
+    np.ndarray of shape (n_timepoints,)
+        Mode-based symbolic barycenter.
+    """
+    from collections import Counter
+    from smartflat.engine.distances._rtwe import (
+        rtwe_alignment_path, rtwe_pairwise_distance,
+    )
+    X = np.asarray(X_symbolic).astype(int)
+    if len(X) == 1:
+        return X[0].copy()
+    Dc = np.asarray(D_G, dtype=np.float64)
+    Xa = X.astype(np.float64)[:, None, :]
+    D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, precomputed_distances=Dc)
+    ref = X[int(np.argmin(D.sum(axis=1)))].copy()
+    for _ in range(max_iter):
+        votes = [[] for _ in range(len(ref))]
+        for s in X:
+            path, _ = rtwe_alignment_path(
+                s.astype(np.float64), ref.astype(np.float64), Dc, nu=nu, lmbda=lmbda,
+            )
+            for (i, j) in path:
+                if 0 <= j < len(ref) and 0 <= i < len(s):
+                    votes[j].append(int(s[i]))
+        new_ref = np.array(
+            [Counter(v).most_common(1)[0][0] if v else int(ref[j])
+             for j, v in enumerate(votes)],
+            dtype=np.int64,
+        )
+        if np.array_equal(new_ref, ref):
+            break
+        ref = new_ref
+    return ref
+
+
 # ---------------------------------------------------------------------------
 # Native classification distances (one per method)
 # ---------------------------------------------------------------------------
@@ -529,6 +587,32 @@ def dist_rtwe(seq, bary, D_cost, nu=0.001, lmbda=1.0, window=None):
         window=window, nu=nu, lmbda=lmbda,
         precomputed_distances=np.asarray(D_cost, dtype=np.float64),
     ))
+
+
+def pmatch_to_barycenter(seq, bary, D_G, nu=0.001, lmbda=1.0, window=None):
+    """Proportion of exactly-matching symbols along the rTWE alignment between a sequence
+    and a barycenter. This is the paper's discriminative feature; higher means closer."""
+    from smartflat.engine.distances._rtwe import rtwe_alignment_path
+    path, _ = rtwe_alignment_path(
+        np.asarray(seq, dtype=np.float64), np.asarray(bary, dtype=np.float64),
+        np.asarray(D_G, dtype=np.float64), window=window, nu=nu, lmbda=lmbda,
+    )
+    s = np.asarray(seq).astype(int)
+    b = np.asarray(bary).astype(int)
+    nmatch = ntot = 0
+    for k in range(1, len(path)):
+        di = path[k][0] - path[k - 1][0]
+        dj = path[k][1] - path[k - 1][1]
+        if di == 1 and dj == 1:
+            ntot += 1
+            if s[path[k][0]] == b[path[k][1]]:
+                nmatch += 1
+    return nmatch / max(ntot, 1)
+
+
+def dist_neg_pmatch(seq, bary, D_G, nu=0.001, lmbda=1.0, window=None):
+    """Negative p_match, usable as a 'distance' in :func:`evaluate_baselines` (lower=closer)."""
+    return -pmatch_to_barycenter(seq, bary, D_G, nu=nu, lmbda=lmbda, window=window)
 
 
 def default_baseline_methods(D_G, gamma=1.0, nu=0.001, lmbda=1.0, window=None):
