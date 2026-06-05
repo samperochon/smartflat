@@ -520,6 +520,104 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=0.001, lmbda=1.0, max_iter=10, rando
     return ref
 
 
+def barycenter_mean_rtwe_dba(X_symbolic, D_G, nu=1e-4, lmbda=0.1, max_iter=50, tol=1e-7,
+                             init='random', project='round', allow_background=False,
+                             random_state=None):
+    """Mean-based (Petitjean) DBA with rTWE alignment -- faithful thesis reconstruction.
+
+    The paper's barycenter used a forked aeon ``elastic_barycenter_average(
+    method='petitjean', distance='twe', precomputed_distances=D_G, ...)`` that is not
+    available here (stock aeon lacks ``precomputed_distances``). This reconstructs it:
+    each sequence is warped to the current reference via the rTWE alignment path
+    (D_G inner cost), and every reference position is updated to the MEAN of the
+    aligned symbol indices. Mean-averaging nominal category indices is categorically
+    questionable (the motivation for :func:`barycenter_mode_dba`); this function
+    exists to reproduce/diagnose the thesis behaviour and to ablate mean-vs-mode.
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length).
+    D_G : np.ndarray of shape (G, G)
+        Ground cost used for the rTWE alignment.
+    nu, lmbda : float
+        rTWE stiffness / edit penalty (thesis: 1e-4 / 0.1).
+    max_iter, tol : int, float
+        Petitjean iteration budget / convergence tolerance.
+    init : {'random', 'medoid'}
+        'random' picks a seeded member (thesis); 'medoid' uses the rTWE medoid
+        (deterministic, ignores ``random_state``).
+    project : {'round', 'dg', 'none'}
+        How to turn each position's real-valued mean into the returned barycenter:
+        'round' = nearest integer index (default; usable by the rTWE p_match feature);
+        'dg' = symbol minimizing summed D_G to the aligned symbols (Frechet mean in the
+        D_G geometry, categorically principled); 'none' = keep the fractional mean
+        (thesis-faithful; score with the stock-TWE Match feature, not the rTWE one).
+    allow_background : bool
+        If True, background (code 0) symbols are excluded from the position means.
+    random_state : int or None
+        Seed for 'random' init.
+
+    Returns
+    -------
+    np.ndarray of shape (n_timepoints,)
+        Mean-based barycenter (int if ``project`` in {'round', 'dg'}, float if 'none').
+    """
+    from smartflat.engine.distances._rtwe import (
+        rtwe_alignment_path, rtwe_pairwise_distance,
+    )
+    X = np.asarray(X_symbolic).astype(int)
+    Dc = np.asarray(D_G, dtype=np.float64)
+    G = Dc.shape[0]
+    if len(X) == 1:
+        return X[0].astype(np.float64) if project == 'none' else X[0].copy()
+    if init == 'medoid':
+        Xa = X.astype(np.float64)[:, None, :]
+        D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, precomputed_distances=Dc)
+        ref = X[int(np.argmin(D.sum(axis=1)))].astype(np.float64).copy()
+    else:
+        rng = np.random.default_rng(random_state)
+        ref = X[int(rng.integers(len(X)))].astype(np.float64).copy()
+    L = len(ref)
+    votes = [[] for _ in range(L)]
+    for _ in range(max_iter):
+        ref_align = np.clip(np.rint(ref), 0, G - 1)  # integer ref for D_G indexing
+        sums = np.zeros(L)
+        counts = np.zeros(L)
+        votes = [[] for _ in range(L)]
+        for s in X:
+            path, _ = rtwe_alignment_path(
+                s.astype(np.float64), ref_align, Dc, nu=nu, lmbda=lmbda,
+            )
+            for (i, j) in path:
+                if 0 <= j < L and 0 <= i < len(s):
+                    si = int(s[i])
+                    if allow_background and si == 0:
+                        continue
+                    sums[j] += si
+                    counts[j] += 1
+                    votes[j].append(si)
+        new_ref = ref.copy()
+        nz = counts > 0
+        new_ref[nz] = sums[nz] / counts[nz]
+        if np.allclose(new_ref, ref, atol=tol):
+            ref = new_ref
+            break
+        ref = new_ref
+    if project == 'none':
+        return ref
+    if project == 'dg':
+        out = np.empty(L, dtype=np.int64)
+        for j in range(L):
+            if votes[j]:
+                a = np.asarray(votes[j])
+                out[j] = int(np.argmin(Dc[:, a].sum(axis=1)))
+            else:
+                out[j] = int(np.clip(round(float(ref[j])), 0, G - 1))
+        return out
+    return np.clip(np.rint(ref).astype(np.int64), 0, G - 1)
+
+
 # ---------------------------------------------------------------------------
 # Native classification distances (one per method)
 # ---------------------------------------------------------------------------
@@ -615,6 +713,134 @@ def dist_neg_pmatch(seq, bary, D_G, nu=0.001, lmbda=1.0, window=None):
     return -pmatch_to_barycenter(seq, bary, D_G, nu=nu, lmbda=lmbda, window=window)
 
 
+def pmatch_to_barycenter_stock_twe(seq, bary, nu=1e-4, lmbda=0.1):
+    """Thesis ``Match_normalized`` feature: fraction of diagonal 'Match' steps along the
+    STOCK aeon TWE alignment (Euclidean inner cost, no D_G) where the (rounded) barycenter
+    symbol equals the sequence symbol.
+
+    Unlike :func:`pmatch_to_barycenter` (which uses the rTWE alignment and so needs an
+    integer barycenter to index D_G), this uses plain TWE and tolerates a fractional
+    barycenter -- it is the faithful scorer for ``barycenter_mean_rtwe_dba(project='none')``.
+    """
+    from aeon.distances import twe_alignment_path
+    b = np.asarray(bary, dtype=np.float64).reshape(1, -1)
+    s = np.asarray(seq, dtype=np.float64).reshape(1, -1)
+    path, _ = twe_alignment_path(b, s, nu=nu, lmbda=lmbda)
+    bi = np.rint(np.asarray(bary, dtype=np.float64)).astype(int)
+    si = np.rint(np.asarray(seq, dtype=np.float64)).astype(int)
+    nmatch = ntot = 0
+    for k in range(1, len(path)):
+        di = path[k][0] - path[k - 1][0]
+        dj = path[k][1] - path[k - 1][1]
+        if di == 1 and dj == 1:
+            ntot += 1
+            if bi[path[k][0]] == si[path[k][1]]:
+                nmatch += 1
+    return nmatch / max(ntot, 1)
+
+
+def dist_neg_pmatch_stock(seq, bary, nu=1e-4, lmbda=0.1):
+    """Negative stock-TWE Match_normalized, usable as a 'distance' (lower=closer)."""
+    return -pmatch_to_barycenter_stock_twe(seq, bary, nu=nu, lmbda=lmbda)
+
+
+# ---------------------------------------------------------------------------
+# Experimental methods (beat-majority-voting) -- registered via
+# extra_experiment_methods(), kept out of the frozen default_baseline_methods set.
+# ---------------------------------------------------------------------------
+
+def _transition_matrix(seq, G):
+    """Row-normalized bigram transition matrix (G, G) of one symbolic sequence."""
+    s = np.asarray(seq).astype(int)
+    M = np.zeros((G, G), dtype=np.float64)
+    if len(s) > 1:
+        np.add.at(M, (s[:-1], s[1:]), 1.0)
+    rs = M.sum(axis=1, keepdims=True)
+    rs[rs == 0] = 1.0
+    return M / rs
+
+
+def barycenter_transition_matrix(X_symbolic, G):
+    """Group barycenter = mean of per-sequence row-normalized bigram transition matrices.
+
+    Encodes which action tends to follow which -- temporal-ordering structure that the
+    unigram symbol-frequency histogram discards. Each administration contributes equally
+    (mean over per-sequence row-stochastic matrices); the result is re-row-normalized so
+    every row that has any mass sums to 1. The 'barycenter' is a (G, G) stochastic matrix;
+    pair it with :func:`dist_transition`.
+    """
+    T = np.mean([_transition_matrix(s, G) for s in X_symbolic], axis=0)
+    rs = T.sum(axis=1, keepdims=True)
+    rs[rs == 0] = 1.0
+    return T / rs
+
+
+def dist_transition(seq, bary_T):
+    """Frobenius distance between a sequence's transition matrix and a barycenter matrix."""
+    G = np.asarray(bary_T).shape[0]
+    return float(np.linalg.norm(_transition_matrix(seq, G) - np.asarray(bary_T)))
+
+
+def dist_eshape_dtw(seq, bary, D_cost, nu=1e-4, lmbda=0.1, window=None, step_sequ=2):
+    """Edit-Shape DTW outer-loop distance (rTWE inner cost) between a sequence and barycenter.
+
+    Uses the temporal-shape structure of the outer DTW alignment over the rTWE inner cost.
+    O(L^2) pure-Python rTWE calls -- budget tightly (small L, larger ``step_sequ``, fewer
+    splits), like ``soft_dtw``.
+    """
+    from smartflat.engine.distances._eshape_dtw import eshape_dtw_distance
+    return float(eshape_dtw_distance(
+        np.asarray(seq, dtype=np.float64).reshape(1, -1),
+        np.asarray(bary, dtype=np.float64).reshape(1, -1),
+        window=window, nu=nu, lmbda=lmbda,
+        precomputed_distances=np.asarray(D_cost, dtype=np.float64), step_sequ=step_sequ,
+    ))
+
+
+def barycenter_soft_mode_dba(X_symbolic, D_G, nu=1e-4, lmbda=0.1, beta=4.0, max_iter=10,
+                             random_state=None):
+    """Soft categorical DBA: per-position soft voting in the D_G geometry.
+
+    Like :func:`barycenter_mode_dba`, but each aligned symbol ``s`` contributes a soft
+    distribution ``softmax(-beta * D_G[:, s])`` over candidate symbols (rather than a
+    single hard vote), accumulated per reference position; the position is set to the
+    argmax. Symbols close under D_G reinforce one another, reducing the mode-collapse of
+    the hard per-position majority while staying categorical. ``beta -> inf`` recovers
+    the hard mode.
+    """
+    from smartflat.engine.distances._rtwe import (
+        rtwe_alignment_path, rtwe_pairwise_distance,
+    )
+    X = np.asarray(X_symbolic).astype(int)
+    Dc = np.asarray(D_G, dtype=np.float64)
+    G = Dc.shape[0]
+    if len(X) == 1:
+        return X[0].copy()
+    Z = np.exp(-beta * (Dc - Dc.min(axis=0, keepdims=True)))
+    P = Z / Z.sum(axis=0, keepdims=True)  # P[c, s] = soft mass on candidate c from symbol s
+    Xa = X.astype(np.float64)[:, None, :]
+    D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, precomputed_distances=Dc)
+    ref = X[int(np.argmin(D.sum(axis=1)))].copy()
+    for _ in range(max_iter):
+        acc = np.zeros((len(ref), G))
+        for s in X:
+            path, _ = rtwe_alignment_path(
+                s.astype(np.float64), ref.astype(np.float64), Dc, nu=nu, lmbda=lmbda,
+            )
+            for (i, j) in path:
+                if 0 <= j < len(ref) and 0 <= i < len(s):
+                    acc[j] += P[:, int(s[i])]
+        new_ref = np.array(
+            [int(np.argmax(acc[j])) if acc[j].sum() > 0 else int(ref[j])
+             for j in range(len(ref))],
+            dtype=np.int64,
+        )
+        if np.array_equal(new_ref, ref):
+            break
+        ref = new_ref
+    return ref
+
+
 def default_baseline_methods(D_G, gamma=1.0, nu=0.001, lmbda=1.0, window=None):
     """Build the six standard-baseline registry for :func:`evaluate_baselines`.
 
@@ -666,6 +892,42 @@ def default_baseline_methods(D_G, gamma=1.0, nu=0.001, lmbda=1.0, window=None):
         'majority_voting': {
             'build': lambda X, seed: barycenter_majority_voting(X),
             'distance': lambda seq, bary: dist_hamming(seq, bary),
+        },
+    }
+
+
+def extra_experiment_methods(D_G, G, nu=1e-4, lmbda=0.1, window=None, step_sequ=2):
+    """Registry of the beat-majority-voting experimental methods.
+
+    Kept separate from :func:`default_baseline_methods` so the six-baseline contract
+    test (``test_six_baselines_present``) stays stable. Merge with ``|`` in the notebook.
+
+    - ``'transition'`` : bigram transition-matrix barycenter + Frobenius distance --
+      temporal-ordering structure the unigram histogram discards.
+    - ``'eshape_dtw'`` : mode-DBA barycenter scored by the Edit-Shape DTW outer loop
+      (rTWE inner cost). EXPENSIVE -- run at small L / reduced budget.
+    - ``'shape_dba'``  : soft-mode (D_G-soft-vote) DBA barycenter + rTWE p_match feature.
+
+    Returns
+    -------
+    dict
+        ``method_name -> spec`` registry (see :func:`evaluate_baselines`).
+    """
+    return {
+        'transition': {
+            'build': lambda X, seed: barycenter_transition_matrix(X, G),
+            'distance': lambda seq, bary: dist_transition(seq, bary),
+        },
+        'eshape_dtw': {
+            'build': lambda X, seed: barycenter_mode_dba(X, D_G, nu=nu, lmbda=lmbda),
+            'distance': lambda seq, bary: dist_eshape_dtw(
+                seq, bary, D_G, nu=nu, lmbda=lmbda, window=window, step_sequ=step_sequ),
+        },
+        'shape_dba': {
+            'build': lambda X, seed: barycenter_soft_mode_dba(
+                X, D_G, nu=nu, lmbda=lmbda, random_state=seed),
+            'distance': lambda seq, bary: dist_neg_pmatch(
+                seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
         },
     }
 
@@ -888,3 +1150,236 @@ def baseline_significance_tests(df_all, reference='tw_twe', alpha=0.05):
         out['p_value_bh'] = p_bh
         out['significant'] = reject
     return out
+
+
+# ---------------------------------------------------------------------------
+# Track A: decisive ordering-vs-frequency tests
+# (incremental AUC of bigram ordering over the unigram histogram; bootstrap CIs)
+# ---------------------------------------------------------------------------
+
+def histogram_features(X_symbolic, G):
+    """Per-sequence L1-normalized unigram symbol-frequency histograms.
+
+    The pure frequency summary -- discards all temporal ordering. Same count logic
+    as :func:`barycenter_wasserstein`.
+
+    Returns
+    -------
+    np.ndarray of shape (n_sequences, G)
+    """
+    feats = np.zeros((len(X_symbolic), G), dtype=np.float64)
+    for i, seq in enumerate(X_symbolic):
+        h = np.bincount(np.asarray(seq).astype(int), minlength=G).astype(float)
+        s = h.sum()
+        feats[i] = h / s if s > 0 else h
+    return feats
+
+
+def transition_features(X_symbolic, G):
+    """Per-sequence flattened row-normalized bigram transition matrices.
+
+    Each sequence's ``(G, G)`` transition matrix (:func:`_transition_matrix`) is
+    flattened to a length-``G*G`` vector -- the ordering structure ("which action
+    follows which") that the unigram histogram discards.
+
+    Returns
+    -------
+    np.ndarray of shape (n_sequences, G*G)
+    """
+    feats = np.zeros((len(X_symbolic), G * G), dtype=np.float64)
+    for i, seq in enumerate(X_symbolic):
+        feats[i] = _transition_matrix(seq, G).reshape(-1)
+    return feats
+
+
+def _pairwise_subsets(labels):
+    """Yield ``(comparison_name, mask, y_binary)`` for the three paper comparisons.
+
+    ``mask`` selects the two groups from ``labels`` (HEALTHY/RIL/TBI or the pooled
+    CONTROL/PATIENT); ``y_binary`` is 1 for the second group of the pair.
+    """
+    labels = np.asarray(labels, dtype=object)
+    pooled = make_patient_control_labels(labels)
+    specs = [
+        ('HEALTHY_vs_RIL', ('HEALTHY', 'RIL'), labels),
+        ('RIL_vs_TBI', ('RIL', 'TBI'), labels),
+        ('CONTROL_vs_PATIENT', ('CONTROL', 'PATIENT'), pooled),
+    ]
+    for name, (g1, g2), lab in specs:
+        mask = np.isin(lab, [g1, g2])
+        y = (lab[mask] == g2).astype(int)
+        yield name, mask, y
+
+
+def evaluate_incremental_ordering(
+    X_symbolic, labels, G, classifiers=('logreg', 'rf'),
+    n_repeats=10, n_folds=5, random_state=42, n_boot=10000,
+):
+    """Incremental AUC of bigram ordering over the unigram histogram (Track A.1).
+
+    Trains a plain classifier (nested CV) on two feature sets -- ``hist`` (unigram
+    histogram only) and ``both`` (histogram + flattened bigram transitions) -- and
+    reports the *incremental* held-out AUC of adding ordering, per pairwise
+    comparison. This isolates "does temporal ordering carry group signal beyond
+    frequency?" from the barycenter machinery.
+
+    Protocol: outer ``RepeatedStratifiedKFold`` (paired across feature sets via a
+    single pre-enumerated split list), inner ``GridSearchCV`` (roc_auc) for the
+    classifier's regularization; test AUC per outer fold; paired percentile
+    bootstrap 95% CI + Wilcoxon on the ``(both - hist)`` delta over folds.
+
+    Caveat: the bigram block has ``G*G`` features (e.g. 784 at G=28) vs n as low as
+    ~60; StandardScaler + inner-CV L2 (logreg) / RF mitigate but high-dim
+    overfitting is real -- read the delta CI, not the raw ``both`` AUC.
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+    labels : array-like of group labels (HEALTHY/RIL/TBI).
+    G : int -- alphabet size (number of symbols incl. background).
+    classifiers : tuple of {'logreg', 'rf'}.
+    n_repeats, n_folds : outer RepeatedStratifiedKFold geometry.
+    random_state : seed for the splitter and the bootstrap.
+    n_boot : bootstrap resamples for the delta CI.
+
+    Returns
+    -------
+    folds : pd.DataFrame
+        columns: comparison, classifier, feature_set, repeat, fold, auc
+    summary : pd.DataFrame
+        one row per (comparison, classifier): mean_auc_hist, mean_auc_both,
+        mean_delta, delta_ci_low, delta_ci_high, wilcoxon_p, n_folds
+    """
+    from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import roc_auc_score
+    from scipy.stats import wilcoxon
+
+    X_symbolic = np.asarray(X_symbolic)
+    H = histogram_features(X_symbolic, G)
+    T = transition_features(X_symbolic, G)
+    feature_sets = {'hist': H, 'both': np.hstack([H, T])}
+
+    def make_estimator(name):
+        if name == 'logreg':
+            pipe = Pipeline([
+                ('scale', StandardScaler()),
+                ('clf', LogisticRegression(
+                    penalty='l2', solver='liblinear', max_iter=1000)),
+            ])
+            grid = {'clf__C': [0.01, 0.1, 1.0, 10.0]}
+        elif name == 'rf':
+            pipe = Pipeline([('clf', RandomForestClassifier(random_state=0))])
+            grid = {'clf__n_estimators': [200], 'clf__max_depth': [3, 5, None]}
+        else:
+            raise ValueError(f"unknown classifier {name!r}")
+        return pipe, grid
+
+    fold_rows = []
+    for comp, mask, y in _pairwise_subsets(labels):
+        # skip comparisons where a group is absent or too small to stratify-split
+        if len(np.unique(y)) < 2 or np.min(np.bincount(y)) < n_folds:
+            continue
+        cv = RepeatedStratifiedKFold(
+            n_splits=n_folds, n_repeats=n_repeats, random_state=random_state,
+        )
+        # Enumerate splits ONCE so 'hist' and 'both' are evaluated on identical folds.
+        splits = list(cv.split(np.zeros(mask.sum()), y))
+        for clf_name in classifiers:
+            pipe, grid = make_estimator(clf_name)
+            for fs_name, F_full in feature_sets.items():
+                F = F_full[mask]
+                for k, (tr, te) in enumerate(splits):
+                    inner = max(2, int(min(5, np.min(np.bincount(y[tr])))))
+                    gs = GridSearchCV(pipe, grid, scoring='roc_auc', cv=inner)
+                    gs.fit(F[tr], y[tr])
+                    score = gs.predict_proba(F[te])[:, 1]
+                    try:
+                        auc = roc_auc_score(y[te], score)
+                    except ValueError:
+                        auc = 0.5
+                    fold_rows.append({
+                        'comparison': comp, 'classifier': clf_name,
+                        'feature_set': fs_name,
+                        'repeat': k // n_folds, 'fold': k % n_folds, 'auc': auc,
+                    })
+
+    folds = pd.DataFrame(fold_rows)
+
+    rng = np.random.default_rng(random_state)
+    sum_rows = []
+    for (comp, clf_name), g in folds.groupby(['comparison', 'classifier']):
+        wide = g.pivot_table(
+            index=['repeat', 'fold'], columns='feature_set', values='auc',
+        ).dropna()
+        delta = (wide['both'] - wide['hist']).to_numpy()
+        idx = rng.integers(0, len(delta), size=(n_boot, len(delta)))
+        boot = delta[idx].mean(axis=1)
+        lo, hi = np.percentile(boot, [2.5, 97.5])
+        if np.allclose(delta, 0):
+            wp = 1.0
+        else:
+            try:
+                _, wp = wilcoxon(wide['both'].to_numpy(), wide['hist'].to_numpy())
+            except ValueError:
+                wp = 1.0
+        sum_rows.append({
+            'comparison': comp, 'classifier': clf_name,
+            'mean_auc_hist': float(wide['hist'].mean()),
+            'mean_auc_both': float(wide['both'].mean()),
+            'mean_delta': float(delta.mean()),
+            'delta_ci_low': float(lo), 'delta_ci_high': float(hi),
+            'wilcoxon_p': float(wp), 'n_folds': int(len(delta)),
+        })
+    summary = pd.DataFrame(sum_rows)
+    return folds, summary
+
+
+def _per_split_auc(df, method, comparison):
+    """Per-split AUC (inits averaged) for one method+comparison, indexed by split."""
+    sub = df[(df['method'] == method) & (df['comparison'] == comparison)]
+    return sub.groupby('split')['auc'].mean()
+
+
+def bootstrap_auc_ci(df, method, comparison, n_boot=10000, ci=0.95, random_state=0):
+    """Percentile bootstrap CI for a method's mean per-split AUC (Track A.2).
+
+    Resamples the per-split AUC values (inits averaged) from an
+    :func:`evaluate_baselines` result. Returns ``(mean, low, high)``, or
+    ``(nan, nan, nan)`` if the method/comparison is absent.
+    """
+    v = _per_split_auc(df, method, comparison).to_numpy()
+    if len(v) == 0:
+        return float('nan'), float('nan'), float('nan')
+    rng = np.random.default_rng(random_state)
+    idx = rng.integers(0, len(v), size=(n_boot, len(v)))
+    boot = v[idx].mean(axis=1)
+    p = (1 - ci) / 2 * 100
+    lo, hi = np.percentile(boot, [p, 100 - p])
+    return float(v.mean()), float(lo), float(hi)
+
+
+def bootstrap_delta_ci(df, method_a, method_b, comparison, n_boot=10000, ci=0.95,
+                       random_state=0):
+    """Paired bootstrap CI for the ``method_a - method_b`` per-split AUC delta.
+
+    Splits are matched (inits averaged), then the split-level paired deltas are
+    resampled. Returns ``(mean_delta, low, high)``. The pre-registered TBI-vs-RIL
+    test is "positive" iff ``low > 0`` (the ordering method's advantage over the
+    histogram excludes 0).
+    """
+    a = _per_split_auc(df, method_a, comparison)
+    b = _per_split_auc(df, method_b, comparison)
+    joined = pd.concat([a, b], axis=1, join='inner').dropna()
+    if len(joined) == 0:
+        return float('nan'), float('nan'), float('nan')
+    delta = (joined.iloc[:, 0] - joined.iloc[:, 1]).to_numpy()
+    rng = np.random.default_rng(random_state)
+    idx = rng.integers(0, len(delta), size=(n_boot, len(delta)))
+    boot = delta[idx].mean(axis=1)
+    p = (1 - ci) / 2 * 100
+    lo, hi = np.percentile(boot, [p, 100 - p])
+    return float(delta.mean()), float(lo), float(hi)

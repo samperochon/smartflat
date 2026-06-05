@@ -13,25 +13,39 @@ from smartflat.features.symbolic_barycenter.baselines import (
     barycenter_edit_median,
     barycenter_k_medoid,
     barycenter_majority_voting,
+    barycenter_mean_rtwe_dba,
     barycenter_mode_dba,
     barycenter_soft_dtw,
+    barycenter_soft_mode_dba,
+    barycenter_transition_matrix,
     barycenter_wasserstein,
     baseline_significance_tests,
+    bootstrap_auc_ci,
+    bootstrap_delta_ci,
     default_baseline_methods,
     dist_dtw,
     dist_edit,
+    dist_eshape_dtw,
     dist_hamming,
     dist_neg_pmatch,
+    dist_neg_pmatch_stock,
     dist_rtwe,
     dist_soft_dtw,
+    dist_transition,
     dist_wasserstein_hist,
     embed_symbolic_to_real,
     evaluate_baselines,
+    evaluate_incremental_ordering,
+    extra_experiment_methods,
+    histogram_features,
     make_patient_control_labels,
     ordinal_cost_matrix,
     pmatch_to_barycenter,
+    pmatch_to_barycenter_stock_twe,
     project_real_to_symbolic,
+    transition_features,
 )
+from smartflat.features.symbolic_barycenter.baselines import _transition_matrix
 
 
 @pytest.fixture
@@ -413,3 +427,228 @@ class TestPMatch:
         # dist_neg_pmatch == -pmatch, so identity gives -1 (closest possible)
         d = dist_neg_pmatch(X_sym[0], X_sym[0], D5, nu=1e-3, lmbda=1.0)
         assert d == pytest.approx(-1.0)
+
+
+# ---------------------------------------------------------------------------
+# Mean-based (Petitjean) DBA with rTWE alignment -- faithful thesis reconstruction
+# ---------------------------------------------------------------------------
+
+
+class TestMeanRtweDBA:
+    def test_round_output_shape_and_symbols(self, X_sym, D5):
+        b = barycenter_mean_rtwe_dba(X_sym, D5, nu=1e-3, lmbda=1.0, max_iter=3,
+                                     project='round', random_state=0)
+        assert b.ndim == 1 and len(b) == X_sym.shape[1]
+        assert b.dtype.kind in "iu"
+        assert b.min() >= 0 and b.max() < D5.shape[0]
+
+    def test_dg_output_symbols_in_alphabet(self, X_sym, D5):
+        b = barycenter_mean_rtwe_dba(X_sym, D5, nu=1e-3, lmbda=1.0, max_iter=3,
+                                     project='dg', random_state=0)
+        assert b.dtype.kind in "iu"
+        assert b.min() >= 0 and b.max() < D5.shape[0]
+
+    def test_none_projection_is_fractional(self, X_sym, D5):
+        b = barycenter_mean_rtwe_dba(X_sym, D5, nu=1e-3, lmbda=1.0, max_iter=3,
+                                     project='none', random_state=0)
+        assert b.dtype.kind == "f"
+        assert len(b) == X_sym.shape[1]
+
+    def test_single_sequence_identity(self, X_sym, D5):
+        b = barycenter_mean_rtwe_dba(X_sym[:1], D5, max_iter=3, project='round')
+        assert np.array_equal(b, X_sym[0])
+
+    def test_medoid_init_is_deterministic(self, X_sym, D5):
+        b1 = barycenter_mean_rtwe_dba(X_sym, D5, max_iter=3, init='medoid', project='round')
+        b2 = barycenter_mean_rtwe_dba(X_sym, D5, max_iter=3, init='medoid', project='round')
+        assert np.array_equal(b1, b2)
+
+
+class TestStockTwePMatch:
+    def test_self_match_is_one(self, X_sym):
+        assert pmatch_to_barycenter_stock_twe(X_sym[0], X_sym[0], nu=1e-4, lmbda=0.1) == pytest.approx(1.0)
+
+    def test_pmatch_in_unit_interval(self, X_sym):
+        for i in range(len(X_sym)):
+            for j in range(len(X_sym)):
+                p = pmatch_to_barycenter_stock_twe(X_sym[i], X_sym[j], nu=1e-4, lmbda=0.1)
+                assert 0.0 <= p <= 1.0
+
+    def test_tolerates_fractional_barycenter(self, X_sym):
+        frac = X_sym[0].astype(float) + 0.3
+        p = pmatch_to_barycenter_stock_twe(X_sym[0], frac, nu=1e-4, lmbda=0.1)
+        assert 0.0 <= p <= 1.0
+
+    def test_neg_pmatch_stock_is_negative_similarity(self, X_sym):
+        d = dist_neg_pmatch_stock(X_sym[0], X_sym[0], nu=1e-4, lmbda=0.1)
+        assert d == pytest.approx(-1.0)
+
+
+# ---------------------------------------------------------------------------
+# Experimental methods (beat-majority-voting)
+# ---------------------------------------------------------------------------
+
+
+class TestTransition:
+    def test_barycenter_shape_and_rows(self, X_sym, D5):
+        G = D5.shape[0]
+        T = barycenter_transition_matrix(X_sym, G)
+        assert T.shape == (G, G)
+        # each row sums to 1 (rows with outgoing transitions) or 0 (unseen symbols)
+        rs = T.sum(axis=1)
+        for r in rs:
+            assert r == pytest.approx(1.0) or r == pytest.approx(0.0)
+
+    def test_dist_self_is_zero(self, X_sym, D5):
+        from smartflat.features.symbolic_barycenter.baselines import _transition_matrix
+        G = D5.shape[0]
+        T0 = _transition_matrix(X_sym[0], G)
+        assert dist_transition(X_sym[0], T0) == pytest.approx(0.0)
+
+    def test_dist_non_negative(self, X_sym, D5):
+        G = D5.shape[0]
+        T = barycenter_transition_matrix(X_sym, G)
+        for s in X_sym:
+            assert dist_transition(s, T) >= 0.0
+
+
+class TestEshapeDtwDist:
+    def test_self_distance_near_zero(self, X_sym, D5):
+        d = dist_eshape_dtw(X_sym[0], X_sym[0], D5, nu=1e-4, lmbda=0.1, step_sequ=2)
+        assert d == pytest.approx(0.0, abs=1e-6)
+
+    def test_finite_and_non_negative(self, X_sym, D5):
+        d = dist_eshape_dtw(X_sym[0], X_sym[1], D5, nu=1e-4, lmbda=0.1, step_sequ=2)
+        assert np.isfinite(d)
+        assert d >= -1e-9
+
+
+class TestSoftModeDBA:
+    def test_output_shape_and_symbols(self, X_sym, D5):
+        b = barycenter_soft_mode_dba(X_sym, D5, nu=1e-3, lmbda=1.0, beta=4.0, max_iter=3)
+        assert b.ndim == 1 and len(b) == X_sym.shape[1]
+        assert b.dtype.kind in "iu"
+        assert b.min() >= 0 and b.max() < D5.shape[0]
+
+    def test_single_sequence_identity(self, X_sym, D5):
+        b = barycenter_soft_mode_dba(X_sym[:1], D5, max_iter=3)
+        assert np.array_equal(b, X_sym[0])
+
+
+class TestExtraRegistry:
+    def test_specs_well_formed(self, D5):
+        reg = extra_experiment_methods(D5, D5.shape[0], nu=1e-4, lmbda=0.1, step_sequ=2)
+        assert set(reg) == {'transition', 'eshape_dtw', 'shape_dba'}
+        for spec in reg.values():
+            assert callable(spec['distance'])
+            assert spec.get('kind') == 'medoid' or callable(spec['build'])
+
+    def test_disjoint_from_default(self, D5):
+        # experimental methods must not collide with the frozen six-baseline set
+        assert set(extra_experiment_methods(D5, D5.shape[0])).isdisjoint(
+            set(default_baseline_methods(D5)))
+
+
+# ---------------------------------------------------------------------------
+# Track A: ordering-vs-frequency decisive tests
+# ---------------------------------------------------------------------------
+
+class TestOrderingFeatures:
+    def test_histogram_features_shape_and_norm(self, X_sym):
+        H = histogram_features(X_sym, 5)
+        assert H.shape == (4, 5)
+        assert np.allclose(H.sum(axis=1), 1.0)
+        assert (H >= 0).all()
+
+    def test_histogram_features_empty_sequence(self):
+        # an all-padding edge case: a length-0 sequence yields a zero (non-NaN) row
+        H = histogram_features([np.array([], dtype=int)], 5)
+        assert H.shape == (1, 5)
+        assert np.isfinite(H).all() and H.sum() == 0.0
+
+    def test_transition_features_shape(self, X_sym):
+        T = transition_features(X_sym, 5)
+        assert T.shape == (4, 25)
+
+    def test_transition_features_match_matrix(self, X_sym):
+        T = transition_features(X_sym, 5)
+        for i, seq in enumerate(X_sym):
+            assert np.allclose(T[i], _transition_matrix(seq, 5).reshape(-1))
+
+
+class TestIncrementalOrdering:
+    @pytest.fixture
+    def X_labels(self):
+        # two separable groups so AUC is well-defined; tiny for speed
+        rng = np.random.RandomState(0)
+        a = rng.randint(0, 3, size=(10, 15)).astype(np.int64)
+        b = rng.randint(2, 5, size=(10, 15)).astype(np.int64)
+        X = np.vstack([a, b])
+        labels = np.array(['HEALTHY'] * 10 + ['RIL'] * 10, dtype=object)
+        return X, labels
+
+    def test_returns_expected_columns(self, X_labels):
+        X, labels = X_labels
+        folds, summary = evaluate_incremental_ordering(
+            X, labels, G=5, classifiers=('logreg',),
+            n_repeats=2, n_folds=3, random_state=0, n_boot=200,
+        )
+        assert set(folds.columns) == {
+            'comparison', 'classifier', 'feature_set', 'repeat', 'fold', 'auc'}
+        assert set(summary.columns) == {
+            'comparison', 'classifier', 'mean_auc_hist', 'mean_auc_both',
+            'mean_delta', 'delta_ci_low', 'delta_ci_high', 'wilcoxon_p', 'n_folds'}
+        assert ((folds['auc'] >= 0) & (folds['auc'] <= 1)).all()
+
+    def test_hist_and_both_paired_on_same_folds(self, X_labels):
+        X, labels = X_labels
+        folds, _ = evaluate_incremental_ordering(
+            X, labels, G=5, classifiers=('logreg',),
+            n_repeats=2, n_folds=3, random_state=0, n_boot=200,
+        )
+        hist = folds[folds.feature_set == 'hist'][['repeat', 'fold']]
+        both = folds[folds.feature_set == 'both'][['repeat', 'fold']]
+        # identical (repeat, fold) index set => paired evaluation
+        assert (hist.sort_values(['repeat', 'fold']).to_numpy()
+                == both.sort_values(['repeat', 'fold']).to_numpy()).all()
+
+    def test_ci_brackets_mean(self, X_labels):
+        X, labels = X_labels
+        _, summary = evaluate_incremental_ordering(
+            X, labels, G=5, classifiers=('logreg',),
+            n_repeats=2, n_folds=3, random_state=0, n_boot=500,
+        )
+        ok = (summary['delta_ci_low'] <= summary['mean_delta'] + 1e-9) & \
+             (summary['mean_delta'] - 1e-9 <= summary['delta_ci_high'])
+        assert ok.all()
+
+
+class TestBootstrapCI:
+    @pytest.fixture
+    def df_two_methods(self):
+        rng = np.random.RandomState(1)
+        rows = []
+        for split in range(10):
+            rows.append({'method': 'a', 'split': split, 'init': 0,
+                         'comparison': 'RIL_vs_TBI', 'auc': 0.70 + rng.uniform(0, 0.05)})
+            rows.append({'method': 'b', 'split': split, 'init': 0,
+                         'comparison': 'RIL_vs_TBI', 'auc': 0.55 + rng.uniform(0, 0.05)})
+        return pd.DataFrame(rows)
+
+    def test_auc_ci_brackets_mean_deterministic(self, df_two_methods):
+        m1, lo1, hi1 = bootstrap_auc_ci(df_two_methods, 'a', 'RIL_vs_TBI',
+                                        n_boot=2000, random_state=0)
+        m2, lo2, hi2 = bootstrap_auc_ci(df_two_methods, 'a', 'RIL_vs_TBI',
+                                        n_boot=2000, random_state=0)
+        assert (m1, lo1, hi1) == (m2, lo2, hi2)  # deterministic with seed
+        assert lo1 <= m1 <= hi1
+
+    def test_auc_ci_missing_method(self, df_two_methods):
+        out = bootstrap_auc_ci(df_two_methods, 'missing', 'RIL_vs_TBI')
+        assert all(np.isnan(v) for v in out)
+
+    def test_delta_ci_sign(self, df_two_methods):
+        mean, lo, hi = bootstrap_delta_ci(df_two_methods, 'a', 'b', 'RIL_vs_TBI',
+                                          n_boot=2000, random_state=0)
+        assert lo <= mean <= hi
+        assert lo > 0  # method 'a' is constructed to dominate 'b'

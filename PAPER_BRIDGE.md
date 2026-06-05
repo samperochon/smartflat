@@ -25,6 +25,14 @@ Full record: **[RESULTS_HANDOFF_barycenters.md](RESULTS_HANDOFF_barycenters.md)*
 - **The paper's 0.77/0.84 headline almost certainly uses the consolidated G≈28 semantic vocabulary** (A–J clinical scheme subcategories from the prototype visual annotation; *not* a column in the symbolization dataframe — the available label columns are all 76–178 fine prototypes). `tab:baselines` must be reproduced on that vocabulary before filling.
 - **Open work** (kickoff prompts in RESULTS_HANDOFF §11): (1) reproduce on G≈28 + audit/improve TW-TWE+DBA vs majority voting; (2) consolidate a paper-improvement TODO (datasets/algorithms for a tier-1 venue) from the post-thesis docs.
 
+### 🔄 UPDATE (2026-06-05) — G=28 reproduction DONE (RESULTS_HANDOFF §12; notebooks `06c`/`06d`; module `vocab.py`)
+
+- **G=28 built faithfully** = 27 named cooking-action categories + background, from raw labels via the pyramid (`add_pyramid_labels` → `mapping_cluster_category` → segment-smooth), 76.6 % token coverage. Ground cost = a recomputed **28×28 temporal-occurrence Wasserstein** matrix (the `_cat_final` matrix was *not* on disk). The thesis barycenter's **forked aeon** (`elastic_barycenter_average` with `precomputed_distances`) is gone — reconstructed as `barycenter_mean_rtwe_dba`.
+- **Finding confirmed + strengthened at G=28.** Histogram reproduces Patient-vs-Control (**0.79 ≈ 0.77**) and reaches **0.77** RIL-vs-Control; the **faithful TW-TWE+DBA barycenter is near-chance (0.46)**, mode 0.58/0.68. **No** method (bigram/ordering, Edit-Shape DTW, soft-mode DBA, re-selected HP) **BH-beats majority voting.** The paper's **0.84** matches the finer **G=77** histogram, not G=28.
+- **Audit clarification:** passing `D_G` into the *averaging* does NOT rescue the index-mean (`mean_rtwe` 0.45 ≈ stock `aeon_mean` 0.54) — so the §3.2 "mean is broken" caveat is settled, independent of the alignment cost. p_match ≈ frequency overlap (r=0.63); mode-collapsed barycenters.
+- **Implication for `tab:baselines`:** the honest table at G=28 shows frequency baselines competitive/superior — **do not** fill it with the proposed-method row. Reframe per §8 (the *design choices* are ablation-justified; the *group-discrimination claim* is not). One faint positive worth a powered follow-up: Edit-Shape DTW on **TBI-vs-RIL (0.59)**.
+- **Next steps:** RESULTS_HANDOFF §12.6 (two tracks) and the new **Kickoff D** (settle ordering-vs-frequency) + **Kickoff C** (paper TODO consolidation) in §11.
+
 Manuscript edits made (server copy): 4 inert `% REPRODUCTION FLAG` comments + 2 new figures; **no rendered content changed**.
 
 ---
