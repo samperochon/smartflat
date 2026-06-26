@@ -34,13 +34,16 @@ from matplotlib.patches import Rectangle
 from scipy.stats import gaussian_kde
 
 
-from decord import bridge
+try:  # optional dependency: only needed for video-frame access, not the analysis path
+    from decord import bridge
+except ImportError:
+    bridge = None
 from IPython.display import display
 from sklearn.decomposition import PCA
 
 from smartflat.configs.loader import import_config
 from smartflat.constants import progress_cols
-from smartflat.datasets.filter import filter_progress_cols
+from smartflat.utils.utils_coding import filter_progress_cols
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import use_light_dataset
 from smartflat.utils.utils import pairwise, upsample_sequence
@@ -60,7 +63,8 @@ from smartflat.utils.utils_io import (
 )
 from smartflat.utils.utils_visualization import get_colors, plot_gram
 
-bridge.set_bridge('native')
+if bridge is not None:
+    bridge.set_bridge('native')
 
 # Use .png for quicly visualize figures in the navigator/GUI or .svg for Keynote/papers
 FIGURES_EXTENSION = '.png'

@@ -25,7 +25,10 @@ import scipy.cluster.hierarchy as sch
 import scipy.linalg
 import seaborn as sns
 import torch
-from decord import bridge
+try:  # optional dependency: only needed for video-frame access, not the analysis path
+    from decord import bridge
+except ImportError:
+    bridge = None
 from IPython.display import clear_output, display
 from matplotlib.colors import ListedColormap
 from scipy.optimize import linear_sum_assignment
@@ -39,7 +42,7 @@ from smartflat.annotation_smartflat import add_ground_truth_labels
 from smartflat.configs.loader import import_config
 from smartflat.constants import available_modality, gaze_features, progress_cols
 from smartflat.datasets.dataset_gaze import compute_segments_gaze_features, populate_gaze_data
-from smartflat.datasets.filter import filter_progress_cols
+from smartflat.utils.utils_coding import filter_progress_cols
 from smartflat.datasets.loader import get_dataset
 from smartflat.datasets.utils import (
     add_covar_label,

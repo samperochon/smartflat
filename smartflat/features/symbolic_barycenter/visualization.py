@@ -9,6 +9,7 @@ Provides visualization functions for the symbolic barycenter pipeline:
 - Signal chronogram displays
 """
 
+from collections import Counter
 from itertools import product
 
 import matplotlib.patches as mpatches
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import seaborn as sns
+from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.patches import Patch
 
 try:
@@ -25,6 +27,7 @@ try:
 except ImportError:
     HAS_AEON = False
 
+from smartflat.engine.distances._eshape_dtw import eshape_dtw_alignment_path
 from smartflat.engine.distances._rtwe import rtwe_alignment_path
 from smartflat.utils.utils_coding import blue, green, red
 
@@ -38,7 +41,7 @@ def _get_segments(labels):
     end_idxs = _np.r_[change, len(labels)]
     values = labels[start_idxs]
     return list(zip(start_idxs, end_idxs, values))
-from smartflat.utils.utils_visualization import get_cmap
+from smartflat.utils.utils_visualization import get_base_colors, get_cmap
 
 
 def plot_pairwise_twe_distances_by_group(D, df, covar_col):
@@ -174,6 +177,87 @@ def plot_distance_violin(df, D, covar_col, figsize=(1000, 600)):
     fig.show()
 
 
+# Coarse grouping of fine-grained alignment operations into the three paper
+# classes used in `chapter_6_examples_matching` (Match / Background / Mismatch).
+# "Addition" steps are kept as their own bucket so they count toward the Match%
+# denominator (matching the thesis-era `format_title`), even though they share
+# the Mismatch arrow colour.
+_COARSE_CASE_MAP = {
+    "Stable match A and B longer": "Match",
+    "Stable match A longer": "Match",
+    "Stable match B longer": "Match",
+    "Match from A": "Match",
+    "Match from B": "Match",
+    "Match from A and B": "Match",
+    "Stable background match": "Background",
+    "Stable background A longer": "Background",
+    "Stable background B longer": "Background",
+    "Addition A": "Addition",
+    "Addition B": "Addition",
+    "Addition A and B": "Addition",
+    "Stable mismatch": "Mismatch",
+    "Stable mismatch A longer": "Mismatch",
+    "Stable mismatch B longer": "Mismatch",
+}
+
+
+def coarse_case_counts(case_counter):
+    """Collapse fine-grained alignment operations into coarse paper categories.
+
+    Returns a ``Counter`` over {'Match', 'Background', 'Addition', 'Mismatch'}.
+    """
+    coarse = Counter()
+    for fine_label, count in case_counter.items():
+        coarse[_COARSE_CASE_MAP.get(fine_label, "Other")] += count
+    return coarse
+
+
+def match_fraction(case_counter):
+    """Fraction of aligned steps that are genuine (non-background) matches."""
+    coarse = coarse_case_counts(case_counter)
+    total = sum(coarse.values())
+    if total == 0:
+        return 0.0
+    return coarse.get("Match", 0) / total
+
+
+def _format_match_title(case_counter):
+    return f"(Match: {100 * match_fraction(case_counter):.1f}%)"
+
+
+def _draw_alignment_extras(arrow_colors, cost_matrix, path):
+    """Standalone-mode companion figure: cost-matrix heatmap (if given) + legend.
+
+    Only used when ``plot_chronogram_alignment`` creates its own figure; in grid
+    mode the caller draws the shared legend instead.
+    """
+    legend_items = [
+        ("Stable background match", arrow_colors[5]),
+        ("Match", arrow_colors[4]),
+        ("Mismatch", arrow_colors[6]),
+    ]
+    handles = [mpatches.Patch(color=color, label=label) for label, color in legend_items]
+    if cost_matrix is not None:
+        fig, (ax_h, ax_l) = plt.subplots(
+            1, 2, figsize=(14, 4), gridspec_kw={'width_ratios': [10, 15]},
+        )
+        ax_h.imshow(cost_matrix, cmap='coolwarm', aspect='auto')
+        ax_h.set_title("Cost matrix with alignment path")
+        ax_h.invert_yaxis()
+        ax_h.set_xlabel("y")
+        ax_h.set_ylabel("x")
+        ax_l.axis('off')
+        ax_l.legend(handles=handles, loc='center', frameon=False, fontsize=12,
+                    title='Alignment legend', title_fontsize=14)
+    else:
+        fig, ax_l = plt.subplots(figsize=(5, 2))
+        ax_l.axis('off')
+        ax_l.legend(handles=handles, loc='center', ncol=3, frameon=False, fontsize=12,
+                    title='Alignment legend', title_fontsize=14)
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_chronogram_alignment(
     x, y,
     paths=None,
@@ -185,48 +269,52 @@ def plot_chronogram_alignment(
     lmbda=1.0,
     window=None,
     precomputed_distances=None,
-    method='etwe',
+    method='twe',
     title='',
     cmap=None,
+    norm=None,
+    ax=None,
+    do_plot=True,
+    background_values=(-1, -2),
     verbose=False,
 ):
-    """Visualize alignment path between two symbolic chronograms.
+    """Visualize the alignment path between two symbolic chronograms.
 
-    Draws two chronograms (x on top, y on bottom) with colored arrows
-    indicating the alignment operations (match, insertion, deletion,
-    mismatch) from an Edit-Shape DTW or rTWE alignment path.
+    Draws ``x`` (top) and ``y`` (bottom) as colored chronogram strips and
+    connects aligned positions with arrows colored by operation type, collapsed
+    to the three thesis-era paper classes: Match (green), Stable-background match
+    (light-green) and Mismatch/addition (red). Restored from the
+    ``demo_rtwe_barycenter_averaging`` archive notebook, with added ``ax`` support
+    so panels can be tiled into the ``chapter_6_examples_matching`` grid (see
+    :func:`plot_matching_grid`).
 
     Parameters
     ----------
-    x, y : np.ndarray of shape (1, n_timesteps)
-        Symbolic sequences to align.
-    paths : list of list of tuple, optional
-        Pre-computed alignment path. If None, computed via ``method``.
+    x, y : array-like
+        Symbolic sequences, 1D or shape ``(1, n)``.
+    paths : list of (i, j), optional
+        Pre-computed alignment path. If None, it is computed via ``method``.
     cost_path : list of float, optional
-        Cost at each alignment step (used for arrow thickness).
+        Per-step alignment cost; when given, arrow thickness scales with it.
     cost_matrix : np.ndarray, optional
-        If provided, a second plot shows the cost matrix heatmap.
-    nu : float
-        Stiffness parameter for TWE/rTWE.
-    step_sequ : int
-        Step size for subsampling columns.
-    t_max : int or None
-        Maximum timesteps to display.
-    lmbda : float
-        Edit penalty for TWE/rTWE.
-    window : float or None
-        Warping window constraint.
-    precomputed_distances : np.ndarray or None
-        Precomputed pairwise symbol distances.
-    method : str
-        Alignment method: 'rtwe' or 'twe'.
-    title : str
-        Title suffix for plots.
-    cmap : colormap or None
-        Colormap for chronograms. If None, auto-generated from labels.
-    verbose : bool
-        If True, print operation details for each alignment step.
+        When given in standalone mode, a second figure shows the cost matrix.
+    method : {'twe', 'rtwe'}
+        Distance used to compute ``paths`` when it is None.
+    ax : matplotlib axis, optional
+        Draw into this axis (grid mode). When None a new figure is created.
+    do_plot : bool
+        When False, only tally operations and return the counter (no drawing).
+    background_values : tuple
+        Symbol values treated as background/noise (light-green class).
+
+    Returns
+    -------
+    collections.Counter
+        Counts of fine-grained alignment operations. Use
+        :func:`match_fraction` / :func:`coarse_case_counts` to summarize.
     """
+    # Resolve the alignment path. Convention (unchanged): paths[0] is the path,
+    # whether it came from a (path, distance) tuple or a user-supplied list.
     if paths is None and method == 'rtwe':
         paths = rtwe_alignment_path(
             x, y, nu=nu, lmbda=lmbda, window=window,
@@ -238,310 +326,366 @@ def plot_chronogram_alignment(
         paths = twe_alignment_path(x, y, nu=nu, lmbda=lmbda, window=window)
     else:
         paths = [paths]
-    n_x, n_y = len(x.ravel()), len(y.ravel())
-    max_len = max(n_x, n_y)
 
+    x = np.asarray(x).ravel()
+    y = np.asarray(y).ravel()
+    n_x, n_y = len(x), len(y)
     if t_max is None:
-        t_max = max_len
+        t_max = max(n_x, n_y)
 
-    # Build color mapping
-    all_labels = np.unique(np.concatenate((x.ravel(), y.ravel())).astype(int))
-    print(f'Label range: [{all_labels.min()}-{all_labels.max()}] ({len(all_labels)} unique labels)')
-    if cmap is None:
-        cmap = get_cmap(all_labels)
-
-    # Get tab20 colormap
     tab20 = plt.cm.get_cmap('tab20')
     arrow_colors = [tab20(i) for i in range(20)]
 
-    # Setup plot
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.set_xlim(0, t_max)
-    ax.set_ylim(-1.5, 1.5)
+    created_fig = False
+    if do_plot:
+        all_labels = np.unique(np.concatenate((x, y)).astype(int))
+        if cmap is None:
+            cmap = get_cmap(all_labels)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(20, 6))
+            created_fig = True
+        ax.set_xlim(0, t_max)
+        ax.set_ylim(-1.5, 1.5)
+        ax.imshow(x[None, :t_max], extent=[0, n_x, 0.8, 1.5], cmap=cmap, norm=norm, aspect="auto")
+        ax.imshow(y[None, :t_max], extent=[0, n_y, -1.5, -0.8], cmap=cmap, norm=norm, aspect="auto")
+        ax.axhline(0.8, color='black', lw=1, ls='--')
+        ax.axhline(-0.8, color='black', lw=1, ls='--')
 
-    # Draw chronograms
-    ax.imshow(x[None, :t_max], extent=[0, n_x, 0.8, 1.5], cmap=cmap, aspect="auto")
-    ax.imshow(y[None, :t_max], extent=[0, n_y, -1.5, -0.8], cmap=cmap, aspect="auto")
-    ax.axhline(0.8, color='black', lw=1, ls='--')
-    ax.axhline(-0.8, color='black', lw=1, ls='--')
+    # Arrow thickness: scale by cost when available, else a constant width.
+    if cost_path is not None and len(cost_path):
+        c_min, c_max = min(cost_path), max(cost_path)
 
-    # Arrow thickness scaling from cost
-    if cost_path is not None:
-        min_lw, max_lw = 1, 10
-        min_cost, max_cost = min(cost_path), max(cost_path)
-    norm = lambda c: (c - min_cost) / (max_cost - min_cost + 1e-8)
+        def _lw(k):
+            c = cost_path[k] if k < len(cost_path) else cost_path[-1]
+            return 1 + (c - c_min) / (c_max - c_min + 1e-8) * 9
+    else:
+        def _lw(k):
+            return 3
 
-    for k in range(1, len(paths[0])):
-
-        i_prev, j_prev = paths[0][k - 1]
-        i, j = paths[0][k]
-
-        _i = i * step_sequ
-        _j = j * step_sequ
-        _ip = i_prev * step_sequ
-        _jp = j_prev * step_sequ
-
+    case_counter = Counter()
+    path = paths[0]
+    for k in range(1, len(path)):
+        i_prev, j_prev = path[k - 1]
+        i, j = path[k]
+        _i, _ip = i * step_sequ, i_prev * step_sequ
+        _j, _jp = j * step_sequ, j_prev * step_sequ
         if _i >= t_max or _j >= t_max:
             continue
-
+        if _i >= n_x or _j >= n_y or _ip >= n_x or _jp >= n_y:
+            continue
         start = (_i + 0.5, 0.8)
         end = (_j + 0.5, -0.8)
+        xi, xip = x[_i], x[_ip]
+        yj, yjp = y[_j], y[_jp]
 
-        xi, xip = x[0, _i], x[0, _ip]
-        yj, yjp = y[0, _j], y[0, _jp]
-
-        # Diagonal move: match or substitution (both i and j incremented)
+        # Diagonal move: both sequences advance.
         if i == i_prev + 1 and j == j_prev + 1:
             if xip == yjp:
-
                 if xi == yj:
-
-                    if xi in [-1, -2]:
-                        color = arrow_colors[5]
-                        operation = "Stable noise match"
-                        if verbose:
-                            green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
+                    if xi in background_values:
+                        color, operation = arrow_colors[5], "Stable background match"
                     else:
-                        color = arrow_colors[4]
-                        operation = "Stable match A and B longer"
-                        if verbose:
-                            green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                elif xi != yj:
-
+                        color, operation = arrow_colors[4], "Stable match A and B longer"
+                else:
+                    color = arrow_colors[6]
                     if xi == xip and yj != yjp:
-                        color = arrow_colors[3]
-                        operation = "Addition for B"
-                        if verbose:
-                            blue(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
+                        operation = "Addition B"
                     elif yj == yjp and xi != xip:
-                        color = arrow_colors[3]
-                        operation = "Addition for A"
-                        if verbose:
-                            blue(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                    elif xi != xip and yj != yjp:
-                        color = arrow_colors[2]
-                        operation = "Addition for A and B"
-                        if verbose:
-                            blue(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-            elif xip != yjp:
-
-                if xi == yj:
-
-                    if xip == xi and yjp != yj:
-                        color = arrow_colors[4]
-                        operation = "Match from B"
-                        if verbose:
-                            green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                    elif xip != xi and yjp == yj:
-                        color = arrow_colors[4]
-                        operation = "Match from A"
-                        if verbose:
-                            green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                    elif xip != xi and yjp == yj:
-                        color = arrow_colors[4]
-                        operation = "Match from A and B"
-                        if verbose:
-                            green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                elif xi != yj:
-
-                    if xip == xi and yjp == yj:
-                        color = arrow_colors[7]
-                        operation = "Stable mismatch"
-                        if verbose:
-                            red(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                    elif xip != xi and yjp == yj:
-                        color = arrow_colors[3]
-                        operation = "Addition from A"
-                        if verbose:
-                            blue(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                    elif xip == xi and yjp != yj:
-                        color = arrow_colors[3]
-                        operation = "Addition from B"
-                        if verbose:
-                            blue(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                    elif xip != xi and yjp != yj:
-                        color = arrow_colors[2]
-                        operation = "Addition from A and B"
-                        if verbose:
-                            blue(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
+                        operation = "Addition A"
                     else:
-                        red(f" x: {xip}->{xi}, y: {yjp}->{yj}")
-                        raise ValueError(
-                            "Unknown case for diagonal move: match or substitution"
-                        )
-
+                        operation = "Addition A and B"
             else:
-                raise ValueError(
-                    "Unknown case for diagonal move: match or substitution"
-                )
-
-        # Vertical move: x stays, y moves
+                if xi == yj:
+                    color = arrow_colors[4]
+                    if xip == xi and yjp != yj:
+                        operation = "Match from B"
+                    elif xip != xi and yjp == yj:
+                        operation = "Match from A"
+                    else:
+                        operation = "Match from A and B"
+                else:
+                    color = arrow_colors[6]
+                    if xip == xi and yjp == yj:
+                        operation = "Stable mismatch"
+                    elif xip != xi and yjp == yj:
+                        operation = "Addition A"
+                    elif xip == xi and yjp != yj:
+                        operation = "Addition B"
+                    else:
+                        operation = "Addition A and B"
+        # Horizontal move: y advances, x stays.
         elif i == i_prev and j == j_prev + 1:
             if xi == yj:
-
-                if xi in [-1, -2]:
-                    color = arrow_colors[5]
-                    operation = "Stable noise B longer"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
+                if xi in background_values:
+                    color, operation = arrow_colors[5], "Stable background B longer"
                 else:
-                    color = arrow_colors[4]
-                    operation = "Stable match B longer"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-            elif xi != yj:
-
-                if xi == yj and yj == yjp:
-                    raise ValueError(
-                        "This case should not happen: xi == yj and yj == yjp"
-                    )
-
-                elif xi == yj and yj != yjp:
-                    color = arrow_colors[4]
-                    operation = "Match from B"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                elif xi != yj and yj == yjp:
-                    color = arrow_colors[7]
-                    operation = "Stable mismatch B longer"
-                    if verbose:
-                        red(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                elif xi != yj and yj != yjp:
-                    color = arrow_colors[3]
-                    operation = "Stable mismatch addition B"
-                    if verbose:
-                        red(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-                else:
-                    green(f" x: {xip}->{xi}, y: {yjp}->{yj}")
-                    raise ValueError(
-                        "Unknown case for horizontal move: x moves, y stays"
-                    )
-
+                    color, operation = arrow_colors[4], "Stable match B longer"
             else:
-                raise ValueError(
-                    "Unknown case for horizontal move: x moves, y stays"
-                )
-
-        # Horizontal move: x moves, y stays
+                color = arrow_colors[6]
+                operation = "Stable mismatch B longer" if yj == yjp else "Addition B"
+        # Vertical move: x advances, y stays.
         elif i == i_prev + 1 and j == j_prev:
             if xi == yj:
-
-                if xi in [-1, -2]:
-                    color = arrow_colors[5]
-                    operation = "Stable noise A longer"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
+                if xi in background_values:
+                    color, operation = arrow_colors[5], "Stable background A longer"
                 else:
-                    color = arrow_colors[4]
-                    operation = "Stable match A longer"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-            elif xi != yj:
-
-                if xi == yj and yj == yjp:
-                    raise ValueError(
-                        "This case should not happen: xi == yj and yj == yjp"
-                    )
-
-                elif xi == yj and xi != xip:
-                    color = arrow_colors[4]
-                    operation = "Match from A"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                elif xi != yj and xi == xip:
-                    color = arrow_colors[7]
-                    operation = "Stable mismatch A longer"
-                    if verbose:
-                        green(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-
-                elif xi != yj and xi != xip:
-                    color = arrow_colors[3]
-                    operation = "Stable mismatch addition A"
-                    if verbose:
-                        red(f"{operation}: x: {xip}->{xi}, y: {yjp}->{yj}")
-                else:
-                    green(f" x: {xip}->{xi}, y: {yjp}->{yj}")
-                    raise ValueError(
-                        "Unknown case for horizontal move: x moves, y stays"
-                    )
-
+                    color, operation = arrow_colors[4], "Stable match A longer"
             else:
-                raise ValueError(
-                    "Unknown case for horizontal move: x moves, y stays"
-                )
-
+                color = arrow_colors[6]
+                operation = "Stable mismatch A longer" if xi == xip else "Addition A"
         else:
-            print(f"Unknown case for move: i: {i}, j: {j}, i_prev: {i_prev}, j_prev: {j_prev}")
-            red(f" x: {xip}->{xi}, y: {yjp}->{yj}")
-            raise ValueError(
-                "Unknown case for move: neither diagonal, horizontal nor vertical"
+            raise ValueError("Unknown move type (not diagonal, horizontal, or vertical)")
+
+        case_counter[operation] += 1
+        if verbose:
+            print(f"{operation}: x {xip}->{xi}, y {yjp}->{yj}")
+        if do_plot:
+            ax.annotate(
+                '', xy=end, xytext=start,
+                arrowprops=dict(arrowstyle='->', color=color, lw=_lw(k), alpha=0.9),
             )
 
-        cost = cost_path[k]
-        lw = min_lw + norm(cost) * (max_lw - min_lw)
-
-        ax.annotate(
-            '', xy=end, xytext=start,
-            arrowprops=dict(arrowstyle='->', color=color, lw=lw, alpha=0.9),
+    if do_plot:
+        ax.set_title(
+            f"Optimal alignment\n{title} {_format_match_title(case_counter)}",
+            fontsize=14, weight='bold',
         )
+        ax.set_xticks([])
+        ax.set_yticks([])
+        if created_fig:
+            plt.tight_layout()
+            plt.show()
+            _draw_alignment_extras(arrow_colors, cost_matrix, path)
 
-    ax.set_title(
-        f"Chronogram Alignment with TWE (Arrows Colored by Type)\n{title}",
-        fontsize=14,
-    )
-    plt.tight_layout()
-    plt.show()
+    return case_counter
 
-    # Second plot: cost matrix heatmap with legend
-    if cost_matrix is None:
-        return
-    fig, (ax_heatmap, ax_legend) = plt.subplots(
-        1, 2, figsize=(14, 4), gridspec_kw={'width_ratios': [10, 15]},
-    )
 
-    ax_heatmap.imshow(cost_matrix, cmap='coolwarm', aspect='auto')
-    ax_heatmap.set_title("rTWE Cost Matrix with Alignment Path")
-    ax_heatmap.invert_yaxis()
-    ax_heatmap.set_xlabel("y ")
-    ax_heatmap.set_ylabel("x ")
+def _categorical_cmap_norm(all_labels):
+    """Build a categorical ``(cmap, norm, value_to_color)`` over integer symbols.
 
-    ax_legend.axis('off')
-    legend_items = [
-        ("Stable noise match", arrow_colors[5]),
-        ("Match", arrow_colors[4]),
-        ("Single Addition", arrow_colors[3]),
-        ("Double Addition", arrow_colors[2]),
-        ("Stable mismatch", arrow_colors[7]),
+    Colors come from :func:`get_base_colors` over the sorted unique symbols (the
+    same scheme as :func:`plot_chronogames`), and symbols are mapped by VALUE via a
+    ``BoundaryNorm`` so colors stay identical across panels and the two strips.
+    """
+    vals = np.sort(np.unique(np.asarray(all_labels).astype(int)))
+    colors = get_base_colors(len(vals))
+    value_to_color = {int(v): colors[i] for i, v in enumerate(vals)}
+    cmap = ListedColormap(colors)
+    if len(vals) == 1:
+        boundaries = np.array([vals[0] - 0.5, vals[0] + 0.5])
+    else:
+        mids = (vals[:-1] + vals[1:]) / 2.0
+        boundaries = np.concatenate([[vals[0] - 0.5], mids, [vals[-1] + 0.5]])
+    norm = BoundaryNorm(boundaries, cmap.N)
+    return cmap, norm, value_to_color
+
+
+def compute_alignment_path(method, x, y, D_G=None, nu=0.001, lmbda=1.0, window=None):
+    """Return ``(path, distance)`` for one symbolic pair under the named technique.
+
+    Parameters
+    ----------
+    method : {'twe', 'rtwe', 'eshape'}
+        Alignment technique. ``'rtwe'`` and ``'eshape'`` use the Wasserstein ground
+        cost ``D_G``; ``'twe'`` is stock aeon TWE on the raw symbol indices.
+    x, y : array-like
+        Symbolic sequences (1D or ``(1, n)``).
+    D_G : np.ndarray, optional
+        Prototype ground-cost matrix (required for ``'rtwe'``/``'eshape'``).
+    """
+    x2 = np.asarray(x, dtype=np.float64).reshape(1, -1)
+    y2 = np.asarray(y, dtype=np.float64).reshape(1, -1)
+    if method == 'twe':
+        if not HAS_AEON:
+            raise ImportError("aeon is required for method='twe'. Install with: pip install aeon")
+        return twe_alignment_path(x2, y2, nu=nu, lmbda=lmbda, window=window)
+    if method == 'rtwe':
+        return rtwe_alignment_path(
+            x2, y2, precomputed_distances=D_G, window=window, nu=nu, lmbda=lmbda)
+    if method == 'eshape':
+        return eshape_dtw_alignment_path(
+            x2, y2, window=window, nu=nu, lmbda=lmbda, precomputed_distances=D_G)
+    raise ValueError(f"Unknown method {method!r}; expected 'twe', 'rtwe' or 'eshape'.")
+
+
+def plot_matching_grid(
+    panels,
+    n_cols=2,
+    all_labels=None,
+    code_to_label=None,
+    background_values=(-1, -2),
+    figsize=None,
+    suptitle='',
+    savepath=None,
+):
+    """Tile alignment panels into a grid with shared symbol + alignment legends.
+
+    Reproduces the thesis-era ``chapter_6_examples_matching`` figure: each panel is
+    one :func:`plot_chronogram_alignment` (top/bottom chronograms with Match /
+    Stable-background match / Mismatch arrows and a per-panel ``Match %`` title). A
+    single categorical colormap is shared across every panel so symbol colors are
+    consistent; the notebook precomputes each panel's alignment path (e.g. via
+    :func:`compute_alignment_path`) so this helper stays distance-agnostic.
+
+    Parameters
+    ----------
+    panels : list of dict
+        Each panel: ``{'x', 'y', 'path', 'label'}`` plus optional
+        ``'t_max'`` / ``'background_values'``. ``'path'`` is a precomputed
+        alignment path (list of ``(i, j)``); ``'label'`` is the title suffix
+        (e.g. ``'rTWE distance=123.4'``) to which ``(Match: X%)`` is appended.
+    n_cols : int
+        Number of columns in the grid.
+    all_labels : array-like, optional
+        Global symbol set for the shared colormap. Defaults to the union of all
+        symbols across the panels.
+    code_to_label : dict, optional
+        ``symbol value -> human label`` for the right-hand symbol legend.
+    savepath : str, optional
+        If given, the figure is saved (``dpi=150``, tight bbox).
+    """
+    n = len(panels)
+    n_rows = int(np.ceil(n / n_cols))
+    if all_labels is None:
+        all_labels = np.concatenate(
+            [np.asarray(p['x']).ravel() for p in panels]
+            + [np.asarray(p['y']).ravel() for p in panels]
+        )
+    all_labels = np.sort(np.unique(np.asarray(all_labels).astype(int)))
+    cmap, norm, value_to_color = _categorical_cmap_norm(all_labels)
+
+    if figsize is None:
+        figsize = (11 * n_cols, 2.4 * n_rows)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+
+    for idx, panel in enumerate(panels):
+        r, c = divmod(idx, n_cols)
+        plot_chronogram_alignment(
+            panel['x'], panel['y'], paths=panel['path'], ax=axes[r][c],
+            cmap=cmap, norm=norm, do_plot=True,
+            background_values=panel.get('background_values', background_values),
+            t_max=panel.get('t_max'), title=panel.get('label', ''),
+        )
+    for idx in range(n, n_rows * n_cols):
+        r, c = divmod(idx, n_cols)
+        axes[r][c].axis('off')
+
+    # Alignment legend (bottom): the three paper classes.
+    tab20 = plt.cm.get_cmap('tab20')
+    align_items = [
+        ("Match", tab20(4)),
+        ("Stable background match", tab20(5)),
+        ("Mismatch", tab20(6)),
     ]
-    handles = [mpatches.Patch(color=color, label=label) for label, color in legend_items]
-    ax_legend.legend(
-        handles=handles,
-        loc='center',
-        ncol=1,
-        frameon=False,
-        fontsize=12,
-        title='Alignment Operation Legend',
-        title_fontsize=14,
-    )
+    align_handles = [mpatches.Patch(color=col, label=lab) for lab, col in align_items]
+    fig.legend(handles=align_handles, loc='lower center', ncol=3, frameon=False,
+               fontsize=12, title='Alignment legend', bbox_to_anchor=(0.5, -0.02))
 
-    plt.tight_layout()
-    plt.show()
+    # Symbol legend (right), if a label map is provided.
+    if code_to_label is not None:
+        sym_handles = [
+            mpatches.Patch(color=value_to_color[v], label=code_to_label.get(v, str(v)))
+            for v in all_labels if v in value_to_color
+        ]
+        fig.legend(handles=sym_handles, loc='center left', bbox_to_anchor=(1.0, 0.5),
+                   frameon=False, fontsize=8, title='Symbols')
+
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=15, weight='bold')
+    right = 0.86 if code_to_label is not None else 1.0
+    fig.tight_layout(rect=[0, 0.04, right, 0.97 if suptitle else 1.0])
+    if savepath:
+        fig.savefig(savepath, dpi=150, bbox_inches='tight')
+    return fig
+
+
+def plot_cohort_barycenters(
+    group_sequences,
+    groups=None,
+    all_labels=None,
+    mask_background=False,
+    background_value=0,
+    code_to_label=None,
+    title='',
+    figsize=None,
+    savepath=None,
+):
+    """Stack per-cohort symbolic sequences as chronogram strips sharing one colormap.
+
+    Reproduces the thesis-era cohort barycenter figures (``chapter_6_bg`` /
+    ``chapter_6_non_bg``): one block per diagnosis group, every block sharing a
+    single categorical symbol colormap so colors are comparable across cohorts —
+    the consistency the ad-hoc ``imshow(..., cmap='tab20')`` cells lacked.
+
+    Parameters
+    ----------
+    group_sequences : dict[str, np.ndarray]
+        ``group -> sequences``. A 1D array is a single barycenter (one row); a 2D
+        array ``(n_seqs, T)`` is stacked (one row per sequence). All sequences are
+        assumed equal length (already upsampled/padded upstream).
+    groups : list[str], optional
+        Plot order; defaults to ``group_sequences`` insertion order.
+    all_labels : array-like, optional
+        Global symbol set for the shared colormap (defaults to the union over all
+        groups).
+    mask_background : bool
+        If True, ``background_value`` cells are masked (drawn white) — the
+        ``non_bg`` variant.
+    code_to_label : dict, optional
+        ``symbol value -> human label`` for the right-hand symbol legend.
+    savepath : str, optional
+        If given, save the figure (dpi=150, tight bbox).
+    """
+    if groups is None:
+        groups = list(group_sequences.keys())
+    mats = {}
+    for g in groups:
+        arr = np.asarray(group_sequences[g], dtype=float)
+        mats[g] = arr[None, :] if arr.ndim == 1 else arr
+
+    if all_labels is None:
+        all_labels = np.concatenate([m.ravel() for m in mats.values()])
+    all_labels = np.asarray(all_labels, dtype=float)
+    all_labels = all_labels[~np.isnan(all_labels)]
+    cmap, norm, value_to_color = _categorical_cmap_norm(all_labels)
+    cmap = ListedColormap(list(cmap.colors))  # copy so set_bad does not mutate a shared cmap
+    cmap.set_bad('white')
+
+    n = len(groups)
+    height_ratios = [mats[g].shape[0] for g in groups]
+    if figsize is None:
+        total_rows = sum(height_ratios)
+        figsize = (20, max(1.2 * n, 0.04 * total_rows + 0.5 * n))
+    fig, axes = plt.subplots(
+        n, 1, figsize=figsize, sharex=True,
+        gridspec_kw={'height_ratios': height_ratios},
+    )
+    if n == 1:
+        axes = [axes]
+    for ax, g in zip(axes, groups):
+        data = mats[g].copy()
+        if mask_background:
+            data[data == background_value] = np.nan
+        ax.imshow(data, aspect='auto', cmap=cmap, norm=norm, interpolation='nearest')
+        ax.set_yticks([])
+        ax.set_ylabel(g, fontweight='bold', fontsize=11,
+                      rotation=0, ha='right', va='center')
+    axes[-1].set_xlabel('Time (symbols)', fontsize=10)
+
+    if code_to_label is not None:
+        present = np.sort(np.unique(all_labels.astype(int)))
+        sym_handles = [
+            mpatches.Patch(color=value_to_color[int(v)], label=code_to_label.get(int(v), str(int(v))))
+            for v in present if int(v) in value_to_color
+        ]
+        fig.legend(handles=sym_handles, loc='center left', bbox_to_anchor=(1.0, 0.5),
+                   frameon=False, fontsize=8, title='Symbols')
+    if title:
+        fig.suptitle(title, fontweight='bold', y=1.0)
+    fig.tight_layout(rect=[0, 0, 0.9 if code_to_label is not None else 1.0, 1.0])
+    if savepath:
+        fig.savefig(savepath, dpi=150, bbox_inches='tight')
+    return fig
 
 
 def plot_rtwe(
@@ -704,3 +848,79 @@ def plot_shapes_signal(new_x, new_b, cmap, step_sequ=1, title=''):
         fig.colorbar(im, ax=ax, orientation='vertical', fraction=0.015, pad=0.04)
 
     plt.show()
+
+
+def audit_scatter(x, y, xlabel='', ylabel='', title='', ax=None, color='tab:blue',
+                  annotate_corr=True, savepath=None):
+    """Scatter with optional Pearson/Spearman annotation and despined axes.
+
+    Small shared-styling wrapper for the NB06d audit scatter plots
+    (e.g. ``p_match`` vs symbol-frequency overlap).
+    """
+    created = ax is None
+    if created:
+        fig, ax = plt.subplots(figsize=(5.5, 4.5))
+    else:
+        fig = ax.figure
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    ax.scatter(x, y, s=14, alpha=0.5, color=color, edgecolor='none')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, weight='bold')
+    if annotate_corr:
+        m = np.isfinite(x) & np.isfinite(y)
+        if m.sum() > 2:
+            from scipy.stats import pearsonr, spearmanr
+            r, _ = pearsonr(x[m], y[m])
+            rho, _ = spearmanr(x[m], y[m])
+            ax.annotate(
+                f"Pearson r={r:.2f}\nSpearman ρ={rho:.2f}",
+                xy=(0.03, 0.97), xycoords='axes fraction', va='top', fontsize=10,
+                bbox=dict(boxstyle='round', fc='white', ec='0.7', alpha=0.85),
+            )
+    sns.despine(ax=ax)
+    if created:
+        fig.tight_layout()
+    if savepath:
+        fig.savefig(savepath, dpi=130, bbox_inches='tight')
+    return fig
+
+
+def audit_line_vs_lambda(lam_grid, ys, labels=None, ylabel='', title='', ax=None,
+                         selected_lambda=None, baseline=None, baseline_label='baseline',
+                         symlog=True, linthresh=1e-3, marker='o', savepath=None):
+    """Line(s) vs the edit penalty ``λ`` (symlog x), with optional selected-λ
+    marker and a horizontal baseline.
+
+    Shared-styling wrapper for the NB06d λ-sweep audits (edit fraction, AUC).
+    ``ys`` may be a single series or a list of series (with matching ``labels``).
+    """
+    created = ax is None
+    if created:
+        fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    else:
+        fig = ax.figure
+    lam = np.asarray(lam_grid, dtype=float)
+    ys_list = ys if (isinstance(ys, (list, tuple)) and np.ndim(ys[0]) > 0) else [ys]
+    labels = labels if labels is not None else [None] * len(ys_list)
+    for series, lab in zip(ys_list, labels):
+        ax.plot(lam, np.asarray(series, dtype=float), marker=marker, label=lab)
+    if symlog:
+        ax.set_xscale('symlog', linthresh=linthresh)
+    if selected_lambda is not None:
+        ax.axvline(selected_lambda, color='crimson', ls='--', lw=1.2,
+                   label=f'selected λ={selected_lambda:g}')
+    if baseline is not None:
+        ax.axhline(baseline, color='0.4', ls=':', lw=1.4, label=baseline_label)
+    ax.set_xlabel('Edit penalty λ')
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, weight='bold')
+    if any(l is not None for l in labels) or selected_lambda is not None or baseline is not None:
+        ax.legend(fontsize=9)
+    sns.despine(ax=ax)
+    if created:
+        fig.tight_layout()
+    if savepath:
+        fig.savefig(savepath, dpi=130, bbox_inches='tight')
+    return fig

@@ -141,142 +141,6 @@ def parse_json(hand_landmarks_path):
 
     return res_l, res_r
 
-# def create_hand_video(identifier, hand_landmarks_path, video_path, downsampling_factor=1000, overwrite=False):
-#     """Create a video with hand landmarks annotations."""
-    
-    
-#     MARGIN = 10  # pixels
-#     FONT_SIZE = 1
-#     FONT_THICKNESS = 1
-#     HANDEDNESS_TEXT_COLOR = (88, 205, 54) # vibrant green
-    
-#     # output generation preparation
-#     participant_id, task_name, modality, video_name = parse_identifier(identifier)
-
-#     os.makedirs(os.path.join(get_data_root(), 'outputs'), exist_ok=True)
-#     os.makedirs(os.path.join(get_data_root(), 'outputs', 'hand_landmarks'), exist_ok=True)
-#     os.makedirs(os.path.join(get_data_root(), 'outputs', 'hand_landmarks', participant_id), exist_ok=True)
-#     os.makedirs(os.path.join(get_data_root(), 'outputs', 'hand_landmarks', participant_id, modality), exist_ok=True)
-
-#     ouptut_path = os.path.join(get_data_root(), 'outputs', 'hand_landmarks', participant_id, modality,  f'{identifier}_hand_landmarks_plot.mp4')
-
-#     if os.path.isfile(ouptut_path) and not overwrite:
-#         print("Video already exists in {} (overwrite={})".format(ouptut_path, overwrite))
-#         return None
-    
-
-#     print(f"[Video creation] processing {video_path}...")
-    
-    
-#     with open(hand_landmarks_path, 'r') as f:
-#         data = json.load(f)
-        
-#     vr = VideoReader(video_path, num_threads=5, ctx=cpu(0))
-    
-#     print(f"Creating annotated video array ({len(data)} frames)")
-
-#     frames = []     
-    
-#     # Create the array of frames with annotations
-#     for i, Hi in tqdm(enumerate(data)):
-        
-#         if i % downsampling_factor != 0:
-#             continue
-    
-#         if len(Hi['handedness']) > 0:
-            
-#             try:
-#                 rgb_image = vr[i].numpy()
-#             except DECORDError:
-#                 print(f'Error while loading frame {i} from {video_path}')
-#                 rgb_image = np.zeros((100, 100, 3))
-#                 rgb_image = np.zeros((360, 640, 3))
-
-#             initial_height, initial_width = rgb_image.shape[:2]
-#             # Calculer la nouvelle résolution tout en conservant le ratio
-#             new_size = (initial_width // 3, initial_height // 3)
-
-#             # Réduire la taille de la frame
-#             rgb_image = cv2.resize(rgb_image, new_size)
-    
-#             hand_landmarks_list = Hi['hand_landmarks']
-#             handedness_list = Hi['handedness']
-#             annotated_image = np.copy(rgb_image)
-    
-#             # Loop through the detected hands to visualize.
-#             for idx in range(len(hand_landmarks_list)):
-#                 hand_landmarks = hand_landmarks_list[idx]
-#                 handedness = handedness_list[idx]
-    
-#                 # Draw the hand landmarks.
-#                 hand_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
-#                 hand_landmarks_proto.landmark.extend([
-#                   landmark_pb2.NormalizedLandmark(x=landmark['x'], y=landmark['y'], z=landmark['z']) for landmark in hand_landmarks
-#                 ])
-#                 solutions.drawing_utils.draw_landmarks(
-#                   annotated_image,
-#                   hand_landmarks_proto,
-#                   solutions.hands.HAND_CONNECTIONS,
-#                   solutions.drawing_styles.get_default_hand_landmarks_style(),
-#                   solutions.drawing_styles.get_default_hand_connections_style())
-    
-#                 # Get the top left corner of the detected hand's bounding box.
-#                 height, width, _ = annotated_image.shape
-#                 x_coordinates = [landmark['x'] for landmark in hand_landmarks]
-#                 y_coordinates = [landmark['y'] for landmark in hand_landmarks]
-#                 text_x = int(min(x_coordinates) * width)
-#                 text_y = int(min(y_coordinates) * height) - MARGIN
-    
-#                 # Draw handedness (left or right hand) on the image.
-#                 cv2.putText(annotated_image, f"{handedness[0]['category_name']}",
-#                             (text_x, text_y), cv2.FONT_HERSHEY_DUPLEX,
-#                             FONT_SIZE, HANDEDNESS_TEXT_COLOR, FONT_THICKNESS, cv2.LINE_AA)
-    
-    
-#             # STEP 5: Process the classification result. In this case, visualize it.
-#             #annotated_image = draw_landmarks_on_image(image, results[-1])
-#             frames.append(annotated_image)
-    
-#         else: # No hands detected
-#             try:
-#                 annotated_image = vr[i].numpy()
-#             except DECORDError:
-#                 print(f'Error while loading frame {i} from {video_path}')
-#                 annotated_image = np.zeros((360, 640, 3))
-                
-            
-#             initial_height, initial_width = annotated_image.shape[:2]
-#             # Calculer la nouvelle résolution tout en conservant le ratio
-#             size = (initial_width // 3, initial_height // 3)
-
-#             # Réduire la taille de la frame
-#             annotated_image = cv2.resize(annotated_image, size)
-            
-#             frames.append(annotated_image)
-
-    
-#     print('done')
-    
-#     frames = np.array(frames)
-#     print("stats: ", frames.shape, frames[0].shape)
-    
-#     # Obtenez les dimensions de la frame
-#     height, width, layers = frames[0].shape
-    
-#     # Définissez le codec et créez un objet VideoWriter
-#     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # ou utilisez 'XVID'
-#     fps = vr.get_avg_fps()
-#     video = cv2.VideoWriter(ouptut_path, fourcc, fps, (width, height))
-    
-#     # Écrivez chaque frame dans le fichier vidéo
-#     for frame in frames:
-#         video.write(frame)
-    
-#     # Libérez les ressources
-#     video.release()
-    
-#     print("Hand video saved in {}".format(ouptut_path))
-#     return frames
 
 def create_hand_video(identifier, hand_landmarks_path, video_path, downsampling_factor=1000, overwrite=False, start_frame=0, end_frame=None):
     """Create a video with hand landmarks annotations for a specified range of frames."""
@@ -471,7 +335,7 @@ def main(root_dir=None):
 
         try:
             vr = VideoReader(video_path, num_threads=5, ctx=cpu(0))
-        except:
+        except Exception:
            #Failure flag
            with open(os.path.join(os.path.dirname(hand_landmark_output_path), '.', f'.{os.path.basename(video_path)[:-4]}_hand_landmarks_flag.txt'), 'w') as f:
                f.write('failure')
@@ -494,7 +358,7 @@ def main(root_dir=None):
                     # Perform hand landmarks detection on the provided single image.
                     hand_landmarker_result = landmarker.detect_for_video(mp_image, frame_timestamp_ms)
                     
-                except:
+                except Exception:
                     hand_landmarker_result = mp.tasks.vision.HandLandmarkerResult(handedness=[], hand_landmarks=[], hand_world_landmarks=[]) 
                     n_failed += 1 
                 results.append(hand_landmarker_result)

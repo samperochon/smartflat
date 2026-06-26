@@ -1,0 +1,28 @@
+# =============================================================================
+# VideoMAE-v2 feature-extraction environment  (GPU, Python 3.10)
+# Original conda env on the Ruche HPC: "videomae"
+#   see scripts/compute/submit_video_blocks*.sh  and  scripts/compute/ruche_gpu*.sh
+#
+# This is a DEDICATED environment, NOT the analysis env. It is deliberately
+# separate because VideoMAE-v2's model code needs the old timm 0.4.12 registry
+# and torch 1.x, which are incompatible with the analysis stack in pyproject.toml
+# (torch 2.x). Do not mix them.
+#
+# Setup:
+#   python3.10 -m venv .venv-video && source .venv-video/bin/activate
+#   pip install -e . --no-deps        # make `smartflat` importable WITHOUT its
+#                                      # torch-2.x core pins (or: export PYTHONPATH=$PWD)
+#   pip install -r requirements-video.txt
+# =============================================================================
+
+# --- VideoMAE-v2 extraction stack (validated era: torch 1.13 / CUDA 10.2-11.x) ---
+timm==0.4.12                # REQUIRED: VideoMAE-v2 model registry (features/video/main.py)
+torch>=1.13,<2.0            # match your CUDA toolkit; paired with timm 0.4.12
+torchvision>=0.14,<0.15     # imported by features/video/main.py; keep paired with torch
+decord>=0.6                 # video frame decoding (source build on macOS)
+
+# --- core libs the module imports (held compatible with the torch-1.x era) ---
+numpy>=1.21,<2.0
+pandas>=1.3
+opencv-python>=4.5,<5
+tqdm>=4.60

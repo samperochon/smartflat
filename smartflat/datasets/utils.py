@@ -374,7 +374,7 @@ def add_test_bounds(df, verbose=False):
     if 'N_raw' not in df.columns:
         df['N_raw'] = df['video_representation_path'].apply(lambda x: np.load(x).shape[0] if os.path.exists(x) else np.nan)
     
-    df['test_bounds'] = df.apply(get_bounds, axis=1)
+    #df['test_bounds'] = df.apply(get_bounds, axis=1)
         
     return df
 

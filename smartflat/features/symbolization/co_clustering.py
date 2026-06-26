@@ -144,7 +144,8 @@ def compute_multimodal_matrices(config_name, annotator_id='samperochon', round_n
     excluded_clusters = fetch_missing_temporal_prototypes(kde_models, annotator_id, round_number, config_name, clustering_config_name, use_K_space=True if input_space == 'K_space' else False)
 
     # 1) Compute temporal distance matrices across prototypes in the latent space before/after reduction per cluster types
-    D_tf_pc = compute_temporal_distance(kde_models, annotator_id, round_number, config_name=config_name, kernel_name='pre_computing', loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=None, overwrite_gw_distances=False)
+    D_tf_pc = compute_temporal_distance(kde_models=kde_models, annotator_id=annotator_id, round_number=round_number, config_name=config_name,
+                                        kernel_name='pre_computing', loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=None, overwrite_gw_distances=False)
     print('cdnjcdn', D_tf_pc.shape)
     print('fdfd', kde_models.keys())# 2) Compute spatiotemporal distance matrices across prototypes in the latent space per cluster types
     D_xf, D_tf, D_f  = compute_combined_distance(kde_models, 
@@ -287,7 +288,7 @@ def compute_combined_distance(kde_models, annotator_id, round_number, excluded_c
     output_folder = os.path.join(get_data_root(), 'outputs', config.experiment_name, config.experiment_id, annotator_id, f'round_{round_number}'); os.makedirs(output_folder, exist_ok=True)    
 
     # 1) Compute temporal distance matrices across prototypes in the latent space per cluster types
-    D_tf = compute_temporal_distance(kde_models, annotator_id, round_number, D_tf_pc=D_tf_pc,  config_name=config_name, kernel_name=kernel_name, loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=temperature_tau, overwrite_gw_distances=False)
+    D_tf = compute_temporal_distance(kde_models=kde_models, annotator_id=annotator_id, round_number=round_number, D_tf_pc=D_tf_pc,  config_name=config_name, kernel_name=kernel_name, loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=temperature_tau, overwrite_gw_distances=False)
      
     # 2) Compute latent distance matrices across prototypes in the latent space  per cluster types
     compute_similarity = True if kernel_name == 'gaussian_rbf' else False
@@ -693,6 +694,7 @@ def compute_temporal_distance(kde_models=None, df=None, annotator_id='samperocho
     TODO: remove cluster type distinction 
     """
     config = import_config(config_name)
+    print(get_data_root(), 'experiments', config.experiment_name, config.experiment_id, annotator_id, f'round_{round_number}')
     experiments_folder = os.path.join(get_data_root(), 'experiments', config.experiment_name, config.experiment_id, annotator_id, f'round_{round_number}'); os.makedirs(experiments_folder, exist_ok=True)    
     
     if temporal_distance is None:
@@ -828,7 +830,7 @@ def compute_combined_distance_across_temperatures(kde_models, annotator_id, roun
         for j, temp in enumerate(temperatures):
             
             # 1) Compute temporal distance matrices across prototypes in the latent space before/after reduction per cluster types
-            D_tf = compute_temporal_distance(kde_models,  annotator_id, round_number, D_tf_pc=D_tf_pc, config_name=config_name, kernel_name=kernel_name, loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=temp_tau, overwrite_gw_distances=False)
+            D_tf = compute_temporal_distance(kde_models=kde_models, annotator_id=annotator_id, round_number=round_number, D_tf_pc=D_tf_pc, config_name=config_name, kernel_name=kernel_name, loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=temp_tau, overwrite_gw_distances=False)
             # 2) Compute distance matrices across prototypes in the latent space before/after reduction per cluster types
             
             # For gaussian rbf we keep the similarity (exp(...)) variable
@@ -894,7 +896,7 @@ def benchmark_over_alpha(kde_models, annotator_id, round_number, excluded_cluste
 
     D_est = S_est = D_x_est = D_t_est = None
 
-    D_tau = compute_temporal_distance(kde_models, annotator_id, round_number, D_tf_pc=D_tf_pc, config_name=config_name, kernel_name=kernel_name, loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=temperature_tau)
+    D_tau = compute_temporal_distance(kde_models=kde_models, annotator_id=annotator_id, round_number=round_number, D_tf_pc=D_tf_pc, config_name=config_name, kernel_name=kernel_name, loss_name=loss_name, gridsize=gridsize, temporal_distance=temporal_distance, input_space=input_space, temperature_tau=temperature_tau)
     
     compute_similarity = True if kernel_name == 'gaussian_rbf' else False
     D_x_pc  = compute_latent_distance(config_name=config_name, annotator_id=annotator_id, round_number=round_number, input_space=input_space, compute_similarity=compute_similarity, kernel_name=kernel_name, normalization=normalization, temperature_x=temperature_x, excluded_clusters=excluded_clusters, agg_fn=agg_fn)

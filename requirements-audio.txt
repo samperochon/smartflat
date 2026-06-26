@@ -1,0 +1,27 @@
+# =============================================================================
+# Speech feature-extraction environment: WhisperX ASR + multilingual-e5-large
+# Original conda env on the Ruche HPC: "whisperx"
+#   see scripts/compute/ruche_speech.sh  and  scripts/compute/submit_speech.sh
+#
+# DEDICATED environment, NOT the analysis env. Requirements that differ from the
+# rest of the project:
+#   - CUDA 11.8   (HPC: module load cuda/11.8.0/gcc-11.2.0)
+#   - system ffmpeg 4.3  (HPC: module load ffmpeg/4.3.2/gcc-11.2.0)
+#   - the `whisperx` CLI must be on PATH: features/audio/main.py calls it via
+#     subprocess, then embeds the transcript with intfloat/multilingual-e5-large.
+#
+# Setup:
+#   python3.10 -m venv .venv-audio && source .venv-audio/bin/activate
+#   pip install -e . --no-deps        # make `smartflat` importable (or: export PYTHONPATH=$PWD)
+#   pip install -r requirements-audio.txt
+# =============================================================================
+
+whisperx                    # speech recognition CLI + library (pulls faster-whisper/ctranslate2)
+transformers>=4.30,<5       # intfloat/multilingual-e5-large embeddings (features/audio/main.py)
+torch>=2.0                  # CUDA 11.8 build, compatible with whisperx/ctranslate2
+librosa>=0.10               # audio loading / resampling
+
+# --- core libs the module imports ---
+numpy>=1.23,<2.0
+pandas>=1.5
+tqdm>=4.60

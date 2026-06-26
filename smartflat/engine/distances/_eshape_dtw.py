@@ -349,14 +349,14 @@ def eshape_dtw_alignment_path(
     distance : float
         Edit-Shape DTW distance.
     """
-    bounding_matrix = create_bounding_matrix(
-        x.shape[-1], y.shape[-1], window, itakura_max_slope
-    )
     cost_matrix = eshape_dtw_cost_matrix(
         x, y, window, nu, lmbda, precomputed_distances, itakura_max_slope,
+    )
+    bounding_matrix = create_bounding_matrix(
+        cost_matrix.shape[0], cost_matrix.shape[1], window, itakura_max_slope
     )
     cost_matrix = _add_inf_to_out_of_bounds_cost_matrix(cost_matrix, bounding_matrix)
     return (
         compute_min_return_path(cost_matrix),
-        cost_matrix[x.shape[-1] - 1, y.shape[-1] - 1],
+        cost_matrix[-1, -1],
     )

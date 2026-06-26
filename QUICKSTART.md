@@ -10,7 +10,7 @@ Get up and running with Smartflat in 5 minutes.
 
 ## Prerequisites
 
-- **Python >= 3.10**
+- **Python 3.10–3.12**
 - **Access to `data-gold-final`** — the processed dataset (~X GB). Ask your supervisor for the location on the lab's external drive or network storage.
 
 ## 1. Clone and install
@@ -18,11 +18,11 @@ Get up and running with Smartflat in 5 minutes.
 ```bash
 git clone <repo-url>
 cd smartflat
-pip install -e ".[all,dev]"
+pip install -e ".[analysis,dev]"
 pre-commit install
 ```
 
-The `[all,dev]` extra installs all modality dependencies plus development tools. For a lighter install, pick only what you need (see [README.md](README.md#installation) for the full list of extras).
+The `[analysis,dev]` extra installs the full **analysis** stack (everything notebooks NB00–08 need) plus development tools — CPU only, no GPU required. GPU feature extraction (VideoMAE / WhisperX / MediaPipe) uses **separate** per-module environments — see the [Environments table in README.md](README.md#environments). For exact, reproducible versions install `requirements-lock.txt` instead. For a lighter install, pick only the extras you need.
 
 ## 2. Set the data root
 
