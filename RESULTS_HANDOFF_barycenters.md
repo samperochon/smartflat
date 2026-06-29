@@ -405,3 +405,74 @@ Ordering carries no group signal beyond symbol frequency.
 **Conclusion.** No temporal/ordering signal beats symbol frequency at any granularity (G=28, G=77) or length
 (L=64, segment-level). Track A is exhausted. **Go to Track B** (reframe the contribution; pursue
 generalisation datasets where ordering genuinely matters — the strongest path to a positive headline).
+
+---
+
+## 13. Session 2 (2026-06-29) — faithful embedding-level rep + full-length (L≈5162) confirmation
+
+**Branch `barycenter-faithful-s2`** (off `main`; faithful 06c already merged to `main` as `82f56b8`).
+Earlier `06*` runs resampled every sequence to **L=64**, which *crippled* the alignment methods.
+Session 2 moved 06/06d/06e to the **embedding-level** representation and **hardened the rTWE kernel**
+so the **definitive full-length test is tractable**.
+
+### 13.1 Kernel hardening (so L≈5162 is runnable)
+`smartflat/engine/distances/_rtwe.py`: `_rtwe_distance_rolling` (2-row buffer, O(L) memory,
+**213 MB → 83 KB/call**, bit-identical to the full cost matrix) + flat-`prange` pairwise. Full pairwise
+**n=122, L=5162 ≈ 3 min** (was intractable). The full matrix is kept only for alignment *paths*.
+The historical large-L "deadlock" was **OMP + a forked kernel**, not L → run notebooks with
+`NUMBA_THREADING_LAYER=workqueue` (baked into each first cell). Tests: **37 pass** in
+`tests/test_distances_rtwe.py` + `tests/test_barycenter_dba.py`.
+
+### 13.2 Headline — the 0.84 is the G=77 histogram, confirmed at full length (NB `06`)
+Native-distance AUC, 10×{2–3} splits, swept over resample length L (mean AUC):
+
+| Comparison | method | L=64 | 256 | 1024 | **5162** |
+|---|---|---|---|---|---|
+| **Control vs RIL** | `wasserstein` (freq.) | 0.84 | 0.83 | 0.82 | **0.82** |
+| | `k_medoid` (align.) | 0.65 | 0.72 | 0.77 | **0.79** |
+| | `tw_twe_mode` (align. bary.) | 0.77 | 0.76 | 0.78 | — |
+| | `majority_voting` | 0.76 | 0.80 | 0.82 | 0.82 |
+| **TBI vs RIL** | `wasserstein` | 0.59 | 0.62 | 0.61 | **0.61** |
+| | `k_medoid` | 0.51 | 0.54 | 0.57 | **0.59** |
+| **Patient vs Control** | `wasserstein` | 0.72 | 0.77 | 0.75 | **0.75** |
+| | `k_medoid` | 0.60 | 0.57 | 0.69 | **0.70** |
+| | `majority_voting` | 0.74 | 0.76 | 0.80 | 0.80 |
+
+- The **frequency histogram is length-invariant** (~0.82–0.84 Control-vs-RIL = the paper's **0.84**) and
+  **leads at every L**.
+- The alignment exemplar `k_medoid` was crippled at L=64 (0.65) and **rises monotonically with L**
+  (→ 0.79 at L≈5162) but **plateaus just below** the histogram — it **never overtakes frequency**, even
+  at the true embedding length. So the L=64 "near-chance" was a resampling artifact, *and* the faithful
+  result is a clean plateau below frequency.
+
+### 13.3 Audit holds at faithful L=512 (NB `06d`)
+p_match ≈ frequency-overlap (Pearson **r=0.61**, ≈ the 0.63 at L=64); **no λ lets the barycenter+p_match
+cross the histogram** (0.78 vs 0.75 best-over-λ); mean-DBA is broken (D_G-aware `mean_rtwe` **0.41** vs
+`mode` 0.62 / `dg_frechet` 0.56; the stock-aeon TWE-DBA does not even run at L=512). In the beat-MV table
+the **only** BH-significant win over majority voting is the **frequency histogram** (Patient-vs-Control,
+0.77 vs 0.63, BH p≈0.01); **no alignment/ordering method beats MV**.
+
+### 13.4 Ordering still loses on the faithful (segment-level) rep (NB `06e`)
+Re-run of §12.7 on the artifact-free segment-level features: Goal 1 `ordering_helps=False` for all 6
+(comparison × classifier); Goal 2 pre-registered eshape **NEGATIVE** (eshape 0.53 vs histogram 0.64,
+Δ=−0.11, 95% CI excludes 0). Confirms §12.7 was not an L=64 artifact.
+
+### 13.5 Artifacts & how the paper repo ingests them
+**Committed (in-repo, readable by anyone with the repo):**
+- The executed notebooks **with figures embedded** — `notebooks/06_barycenter_averaging.ipynb`,
+  `06d_audit_and_experiments.ipynb`, `06e_ordering_vs_frequency.ipynb` (commit `145ddde`). These are the
+  primary, self-contained record (tables in cell outputs + 10/6/1 embedded figures respectively).
+- This handoff (§13) + the `PAPER_BRIDGE.md` 2026-06-29 update — the prose/number summary.
+
+**Local only (gitignored under `$DATA_ROOT/outputs/symbolic_barycenter/`; regenerate by running the
+notebooks):** machine-readable tables and standalone PNGs —
+`auc_vs_L_kspace.csv` + `auc_vs_L_kspace.png`, `chapter_6_hyperparameters_searches.png`,
+`chapter_6_dba_convergence.png`, `chapter_6_non_bg.png`; and under `g28/audit/` + `g28/experiments/`:
+`beat_mv_comparison_g28.csv`, `beat_mv_significance_g28.csv`, `incremental_ordering_summary.csv`,
+`tbi_ril_followup_ci.json`, plus the audit/experiment PNGs.
+
+**To feed the paper repo** (`paper-chapter-6-barycenters/`): copy the needed `chapter_6_*.png` /
+`*_auc*.png` from `$DATA_ROOT/outputs/symbolic_barycenter/` into `paper-chapter-6-barycenters/figures/`
+and cite the numbers from the §13.2 table (or the `*.csv` files), recording provenance in the paper's
+`COMPANION_CODE.md` (per the §5 coordination protocol). The figures are *also* embedded in the committed
+notebooks, so the notebook is a sufficient fallback source if the data dir is unavailable.
