@@ -214,3 +214,73 @@ class TestRtweEdgeCases:
         x = np.array([[2, 2, 2, 2, 2]], dtype=np.int64)
         d = rtwe_distance(x, x, precomputed_distances=D5)
         assert d == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Hardened kernel: rolling-buffer distance + prange pairwise
+# ---------------------------------------------------------------------------
+
+
+class TestRtweRollingEquivalence:
+    """The memory-light rolling-buffer ``rtwe_distance`` must equal the full cost
+    matrix's bottom-right cell (the alignment-path oracle) across L incl. embedding
+    scale, and the parallel (prange) pairwise must match a serial reference exactly."""
+
+    NU, LMBDA = 1e-4, 0.1
+
+    @pytest.mark.parametrize("length", [1, 2, 5, 10, 64, 257, 1024, 2048])
+    def test_rolling_matches_full_matrix_equal_length(self, D28, length):
+        rng = np.random.RandomState(length)
+        x = rng.randint(0, 28, size=length).astype(np.int64)
+        y = rng.randint(0, 28, size=length).astype(np.int64)
+        d_roll = rtwe_distance(x, y, nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28)
+        d_full = rtwe_cost_matrix(
+            x, y, nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28
+        )[-1, -1]
+        assert d_roll == pytest.approx(d_full, rel=1e-9, abs=1e-9)
+
+    @pytest.mark.parametrize("la,lb", [(10, 7), (257, 311), (1024, 777)])
+    def test_rolling_matches_full_matrix_unequal_length(self, D28, la, lb):
+        rng = np.random.RandomState(la + lb)
+        x = rng.randint(0, 28, size=la).astype(np.int64)
+        y = rng.randint(0, 28, size=lb).astype(np.int64)
+        d_roll = rtwe_distance(x, y, nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28)
+        d_full = rtwe_cost_matrix(
+            x, y, nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28
+        )[-1, -1]
+        assert d_roll == pytest.approx(d_full, rel=1e-9, abs=1e-9)
+
+    def test_parallel_pairwise_matches_serial(self, D28):
+        """prange self-pairwise == serial loop of rtwe_distance (no race, deterministic)."""
+        rng = np.random.RandomState(0)
+        n, length = 12, 256
+        X = np.vstack(
+            [rng.randint(0, 28, size=length) for _ in range(n)]
+        ).astype(np.int64)
+        d_par = rtwe_pairwise_distance(
+            X, nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28
+        )
+        d_ser = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                d_ser[i, j] = rtwe_distance(
+                    X[i], X[j], nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28
+                )
+                d_ser[j, i] = d_ser[i, j]
+        np.testing.assert_allclose(d_par, d_ser, rtol=0, atol=0)
+
+    def test_parallel_cross_matches_serial(self, D28):
+        """prange cross-pairwise (X vs Y) == serial reference, exactly."""
+        rng = np.random.RandomState(1)
+        X = np.vstack([rng.randint(0, 28, size=200) for _ in range(6)]).astype(np.int64)
+        Y = np.vstack([rng.randint(0, 28, size=200) for _ in range(4)]).astype(np.int64)
+        d_par = rtwe_pairwise_distance(
+            X, Y, nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28
+        )
+        d_ser = np.zeros((6, 4))
+        for i in range(6):
+            for j in range(4):
+                d_ser[i, j] = rtwe_distance(
+                    X[i], Y[j], nu=self.NU, lmbda=self.LMBDA, precomputed_distances=D28
+                )
+        np.testing.assert_allclose(d_par, d_ser, rtol=0, atol=0)

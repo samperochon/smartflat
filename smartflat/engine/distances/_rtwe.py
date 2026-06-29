@@ -19,7 +19,7 @@ for Time Series Matching. IEEE TPAMI, 31(2), 306-318.
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-from numba import njit
+from numba import njit, prange
 from numba.typed import List as NumbaList
 
 from smartflat.engine.distances._alignment_paths import (
@@ -139,13 +139,57 @@ def rtwe_cost_matrix(
 
 
 @njit(cache=False, fastmath=True, parallel=False)
+def _rtwe_distance_rolling(
+    x: np.ndarray, y: np.ndarray, bounding_matrix: np.ndarray,
+    nu: float, lmbda: float, precomputed_distances: np.ndarray,
+) -> float:
+    """Memory-light rTWE distance via a 2-row rolling buffer.
+
+    Numerically identical to ``_rtwe_cost_matrix(...)[ -1, -1]`` (the bottom-right
+    corner of the full cost matrix, which is what ``_rtwe_distance`` returns), but uses
+    O(L) memory instead of O(L^2): each recurrence cell reads only ``prev[j]``,
+    ``cur[j-1]`` and ``prev[j-1]``, so two 1-D buffers suffice. The full-matrix
+    ``_rtwe_cost_matrix`` is retained for the alignment-path functions, which need the
+    whole matrix for backtracking. Out-of-band interior cells are set to 0.0 to match the
+    full-matrix kernel (which leaves them at their ``np.zeros`` initial value).
+    """
+    x_size = x.shape[1]
+    y_size = y.shape[1]
+    prev = np.empty(y_size)
+    cur = np.empty(y_size)
+    prev[0] = 0.0
+    for j in range(1, y_size):
+        prev[j] = np.inf
+
+    del_add = nu + lmbda
+    for i in range(1, x_size):
+        cur[0] = np.inf
+        for j in range(1, y_size):
+            if bounding_matrix[i - 1, j - 1]:
+                del_x = prev[j] + precomputed_distances[int(x[0, i - 1]), int(x[0, i])] + del_add
+                del_y = cur[j - 1] + precomputed_distances[int(y[0, j - 1]), int(y[0, j])] + del_add
+                match = (
+                    prev[j - 1]
+                    + precomputed_distances[int(x[0, i]), int(y[0, j])]
+                    + precomputed_distances[int(x[0, i - 1]), int(y[0, j - 1])]
+                    + nu * (abs(i - j) + abs((i - 1) - (j - 1)))
+                )
+                cur[j] = min(del_x, del_y, match)
+            else:
+                cur[j] = 0.0
+        prev, cur = cur, prev
+
+    return prev[y_size - 1]
+
+
+@njit(cache=False, fastmath=True, parallel=False)
 def _rtwe_distance(
     x: np.ndarray, y: np.ndarray, bounding_matrix: np.ndarray,
     nu: float, lmbda: float, precomputed_distances: np.ndarray,
 ) -> float:
-    return _rtwe_cost_matrix(x, y, bounding_matrix, nu, lmbda, precomputed_distances)[
-        x.shape[1] - 2, y.shape[1] - 2
-    ]
+    return _rtwe_distance_rolling(
+        x, y, bounding_matrix, nu, lmbda, precomputed_distances,
+    )
 
 
 @njit(cache=False, fastmath=True, parallel=False)
@@ -246,7 +290,7 @@ def rtwe_pairwise_distance(
     )
 
 
-@njit(cache=False, fastmath=True, parallel=False)
+@njit(cache=False, fastmath=True, parallel=True)
 def _rtwe_pairwise_distance(
     X: NumbaList[np.ndarray],
     window: Optional[float],
@@ -259,32 +303,43 @@ def _rtwe_pairwise_distance(
     n_cases = len(X)
     distances = np.zeros((n_cases, n_cases))
 
-    if not unequal_length:
-        n_timepoints = X[0].shape[1]
-        bounding_matrix = create_bounding_matrix(
-            n_timepoints, n_timepoints, window, itakura_max_slope
-        )
-
     padded_X = NumbaList()
     for i in range(n_cases):
         padded_X.append(_pad_arrs(X[i]))
 
-    for i in range(n_cases):
-        for j in range(i + 1, n_cases):
+    # Shared bounding matrix for the equal-length case (a valid placeholder otherwise,
+    # always defined so the prange body never reads an undefined variable).
+    bounding_matrix = create_bounding_matrix(
+        X[0].shape[1], X[0].shape[1], window, itakura_max_slope
+    )
+
+    # Flat upper-triangle prange: each (i, j) is an independent distance written to a
+    # disjoint cell, so there is no race. Built on the O(L)-memory rolling buffer, so each
+    # thread holds only a 2-row buffer (not an O(L^2) cost matrix) — peak memory stays flat
+    # at high L (parallelising the full-matrix kernel would hold n_threads * O(L^2)).
+    for k in prange(n_cases * n_cases):
+        i = k // n_cases
+        j = k % n_cases
+        if j > i:
             x1, x2 = padded_X[i], padded_X[j]
             if unequal_length:
-                bounding_matrix = create_bounding_matrix(
+                bm = create_bounding_matrix(
                     x1.shape[1], x2.shape[1], window, itakura_max_slope
                 )
-            distances[i, j] = _rtwe_distance(
-                x1, x2, bounding_matrix, nu, lmbda, precomputed_distances,
+            else:
+                bm = bounding_matrix
+            distances[i, j] = _rtwe_distance_rolling(
+                x1, x2, bm, nu, lmbda, precomputed_distances,
             )
+
+    for i in range(n_cases):
+        for j in range(i + 1, n_cases):
             distances[j, i] = distances[i, j]
 
     return distances
 
 
-@njit(cache=False, fastmath=True, parallel=False)
+@njit(cache=False, fastmath=True, parallel=True)
 def _rtwe_from_multiple_to_multiple_distance(
     x: NumbaList[np.ndarray],
     y: NumbaList[np.ndarray],
@@ -298,10 +353,6 @@ def _rtwe_from_multiple_to_multiple_distance(
     n_cases = len(x)
     m_cases = len(y)
     distances = np.zeros((n_cases, m_cases))
-    if not unequal_length:
-        bounding_matrix = create_bounding_matrix(
-            x[0].shape[1], y[0].shape[1], window, itakura_max_slope
-        )
 
     padded_x = NumbaList()
     for i in range(n_cases):
@@ -311,16 +362,23 @@ def _rtwe_from_multiple_to_multiple_distance(
     for i in range(m_cases):
         padded_y.append(_pad_arrs(y[i]))
 
-    for i in range(n_cases):
-        for j in range(m_cases):
-            x1, y1 = padded_x[i], padded_y[j]
-            if unequal_length:
-                bounding_matrix = create_bounding_matrix(
-                    x1.shape[1], y1.shape[1], window, itakura_max_slope
-                )
-            distances[i, j] = _rtwe_distance(
-                x1, y1, bounding_matrix, nu, lmbda, precomputed_distances,
+    bounding_matrix = create_bounding_matrix(
+        x[0].shape[1], y[0].shape[1], window, itakura_max_slope
+    )
+
+    for k in prange(n_cases * m_cases):
+        i = k // m_cases
+        j = k % m_cases
+        x1, y1 = padded_x[i], padded_y[j]
+        if unequal_length:
+            bm = create_bounding_matrix(
+                x1.shape[1], y1.shape[1], window, itakura_max_slope
             )
+        else:
+            bm = bounding_matrix
+        distances[i, j] = _rtwe_distance_rolling(
+            x1, y1, bm, nu, lmbda, precomputed_distances,
+        )
     return distances
 
 

@@ -35,6 +35,17 @@ Full record: **[RESULTS_HANDOFF_barycenters.md](RESULTS_HANDOFF_barycenters.md)*
 
 Manuscript edits made (server copy): 4 inert `% REPRODUCTION FLAG` comments + 2 new figures; **no rendered content changed**.
 
+### 🔄 UPDATE (2026-06-29) — Session 2: faithful representation + full-length (L≈5162) confirmation (notebooks `06`/`06d`/`06e`; kernel `engine/distances/_rtwe.py`)
+
+The prior `06*` runs resampled every sequence to **L=64**, which *crippled* the alignment methods. Session 2 moved the whole series to the **embedding-level** representation and hardened the rTWE kernel (rolling-buffer distance + prange pairwise; full pairwise n=122/L=5162 ≈ 3 min) so the **definitive full-length test** is now tractable. Outcomes:
+
+- **The 0.84 headline is the G=77 frequency histogram, confirmed at the true embedding length.** In `06`, the `wasserstein` histogram is **length-invariant** (~0.82–0.84 RIL-vs-Control across L=64…5162, = the paper's 0.84) and **leads at every L**. The alignment exemplar `k_medoid` rises with L (0.65→0.79) but **plateaus just below** the histogram — it never overtakes frequency, even at L≈5162.
+- **The L=64 "alignment near-chance" was a resampling artifact** (it recovers most discriminative power by L≈512–1024) — but the *direction* of the verdict is unchanged and now stronger: frequency ≥ alignment at every faithful length.
+- **Ordering does not beat frequency** (`06e`, segment-level): incremental bigram AUC over the unigram histogram has `ordering_helps=False` for all comparisons; the pre-registered TBI-vs-RIL Edit-Shape DTW test is **NEGATIVE** (Δ vs histogram = −0.11, 95% CI excludes 0).
+- **Audit holds at faithful L=512** (`06d`): p_match≈frequency-overlap (r=0.61); no λ lets alignment cross the histogram (0.78 vs 0.75); mean-DBA broken (`mean_rtwe`≈0.41); only the histogram BH-beats majority voting, no alignment/ordering method does.
+
+**Implication for `tab:baselines` (unchanged from §12, now full-length-confirmed):** report the honest frequency-competitive/superior table and reframe per §8 (design choices ablation-justified; group-discrimination claim qualified). Do **not** fill it with a proposed-method headline row.
+
 ---
 
 ## 1. What the paper needs from this repo
