@@ -445,6 +445,24 @@ Native-distance AUC, 10×{2–3} splits, swept over resample length L (mean AUC)
   at the true embedding length. So the L=64 "near-chance" was a resampling artifact, *and* the faithful
   result is a clean plateau below frequency.
 
+**G=28 (NB `06c`) — same picture at the consolidated vocabulary.** Mean AUC, same 10×{1–3}-split harness
+and L sweep; at the full length the mode-DBA `tw_twe_mode` is gated off (O(L²)/member), so only the
+pairwise-cheap methods run (`n_inits=1`, lossless as they are deterministic):
+
+| Comparison | method | L=64 | 1024 | **5162** |
+|---|---|---|---|---|
+| **Control vs RIL** | `wasserstein` (freq.) | 0.77 | 0.80 | **0.80** |
+| | `k_medoid` (align.) | 0.54 | 0.70 | **0.71** |
+| | `tw_twe_mode` (align. bary.) | 0.53 | 0.68 | — |
+| **Patient vs Control** | `wasserstein` | 0.78 | 0.80 | **0.79** |
+| | `k_medoid` | 0.61 | 0.71 | **0.70** |
+| | `tw_twe_mode` | 0.60 | 0.63 | — |
+
+- Same verdict as G=77: the **histogram is L-invariant (~0.80) and leads at every L**; `k_medoid` rose
+  through the mid-L range and **plateaus (~0.70–0.71) just below** it at the full embedding length, never
+  overtaking frequency. This **closes the open follow-up** stated in 06c's own verdict (full pairwise
+  n=120/L=5162 ≈ 3 min; cached row appended to `g28/auc_vs_L_faithful.csv`).
+
 ### 13.3 Audit holds at faithful L=512 (NB `06d`)
 p_match ≈ frequency-overlap (Pearson **r=0.61**, ≈ the 0.63 at L=64); **no λ lets the barycenter+p_match
 cross the histogram** (0.78 vs 0.75 best-over-λ); mean-DBA is broken (D_G-aware `mean_rtwe` **0.41** vs
