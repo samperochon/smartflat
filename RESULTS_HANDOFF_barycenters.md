@@ -494,3 +494,28 @@ notebooks):** machine-readable tables and standalone PNGs —
 and cite the numbers from the §13.2 table (or the `*.csv` files), recording provenance in the paper's
 `COMPANION_CODE.md` (per the §5 coordination protocol). The figures are *also* embedded in the committed
 notebooks, so the notebook is a sufficient fallback source if the data dir is unavailable.
+
+---
+
+## 14. Next-session kickoffs (post full-length confirmation, 2026-06-30)
+
+With the L≈5162 plateau confirmed at G=28 (§13.2), four follow-up directions are scoped as **separate fresh
+sessions**. Full paste-able prompts (Claude-Code best-practice: read-before-write, plan-mode gate, testable
+success criteria, no-p-hacking, reusable-code-in-package) live as standalone files in `.claude/prompts/`
+(**local-only — `.claude/` is gitignored**, like the existing `session-6b-kickoff.md`; move them to a tracked
+path if they should travel with the repo).
+Honest framing for all of them: these **strengthen the method and the rigor / test new hypotheses** — none is
+"tune the barycenter to beat the frequency histogram on SDS2" (that signal is settled absent; §12–§13).
+
+| Kickoff | File | Goal (one line) | Success target |
+|---|---|---|---|
+| **E** | `.claude/prompts/kickoff-E-order-evaluation.md` | Rigorous, reusable evaluation of how much group-discriminative info lives in symbol *order* vs frequency, anchored by a **frequency-preserving order-shuffle null** (the cheapest, highest-leverage rigor move). | A CI'd `ΔAUC(order)` per comparison + `order_evaluation.py` + tests. |
+| **F** | `.claude/prompts/kickoff-F-barycenter-methods.md` | **Multi-session arc.** Compare categorical-sequence barycenters (current TW-TWE+mode-DBA vs **FGW**, soft-DTW/SSG, profile-HMM/MSA) applied from their *original papers*, judged on **group-representativeness/fidelity** (NOT discrimination AUC). FGW's α gives a principled frequency↔structure decomposition. | Approved arc plan + `barycenter_quality.py` harness + FGW integrated/tested + methods×quality table. |
+| **G** | `.claude/prompts/kickoff-G-behavioral-metrics.md` | A reusable, well-tested **behavioral-structure metrics** library (perseveration, transition entropy, dwell-time, fragmentation, complexity) — *local* disorganisation that frequency and *global* ordering both miss; clinically motivated for dysexecutive syndrome. | `structure_metrics.py` in-package + tests + honest CI'd group comparison. |
+
+**Deferred — D: controlled/synthetic ordering-sensitive validation dataset.** A dataset where *order*, not
+*frequency*, is discriminative would let the method demonstrate it recovers order signal *when present*,
+converting the negative SDS2 result into a clean validity proof (operationalises Track B). **Deferred** — it
+needs design thought (how to generate it: permutation classes, motif insertion, or a process-model generator;
+how to match frequency across classes; what "order signal" to plant). Mirror this note into the paper repo's
+`ROADMAP.md` (`paper-chapter-6-barycenters/`) as future-work before scheduling a session.
