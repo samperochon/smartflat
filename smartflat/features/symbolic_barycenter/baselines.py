@@ -841,6 +841,114 @@ def barycenter_soft_mode_dba(X_symbolic, D_G, nu=1e-4, lmbda=0.1, beta=4.0, max_
     return ref
 
 
+def _classical_mds(D_G, dim=None):
+    """Classical (Torgerson) MDS embedding of a distance matrix.
+
+    Returns coordinates ``E`` of shape ``(G, k)`` whose pairwise Euclidean distances best
+    approximate ``D_G`` (exact when ``D_G`` is Euclidean). Deterministic (symmetric
+    eigendecomposition), unlike SMACOF, so the FGW node features and the decode step are
+    reproducible. Keeps the positive-eigenvalue axes (optionally capped to ``dim``).
+    """
+    D = np.asarray(D_G, dtype=np.float64)
+    n = D.shape[0]
+    J = np.eye(n) - np.full((n, n), 1.0 / n)
+    B = -0.5 * J.dot(D ** 2).dot(J)               # double-centred squared distances
+    w, V = np.linalg.eigh(B)                       # ascending eigenvalues
+    idx = np.argsort(w)[::-1]
+    w, V = w[idx], V[:, idx]
+    keep = w > 1e-9
+    if dim is not None:
+        cap = np.zeros(n, dtype=bool)
+        cap[:dim] = True
+        keep &= cap
+    return V[:, keep] * np.sqrt(w[keep])
+
+
+def barycenter_fgw(X_symbolic, D_G, alpha=0.5, n_nodes=128, feature='mds', mds_dim=None,
+                   max_iter=100, random_state=None):
+    """Fused Gromov-Wasserstein (FGW) barycenter of symbolic sequences.
+
+    FGW (Vayer, Chapel, Flamary, Tavenard, Courty, *ICML 2019* / *Algorithms 2020*; POT
+    ``ot.gromov.fgw_barycenters``) averages structured objects by trading off a feature
+    optimal-transport term and a Gromov-Wasserstein structure term. Each sequence is a
+    graph: nodes = timesteps, node features = a per-symbol vector, structure ``C`` = the
+    intra-sequence timestamp-distance matrix (normalized ``|i-j|``). In POT's convention
+    ``alpha`` weights the **structure** (GW) term, so ``alpha -> 0`` is a feature-only
+    (Wasserstein / symbol-frequency) average and ``alpha -> 1`` is structure-only (GW) --
+    one knob for the frequency<->structure decomposition (``alpha=0`` recovers the
+    histogram baseline as a nested special case; see :func:`barycenter_wasserstein`).
+
+    Two node-feature encodings:
+
+    - ``feature='mds'``    : classical-MDS embedding of ``D_G`` (so FGW's internal
+      Euclidean feature cost approximates the Wasserstein ground cost ``D_G``);
+    - ``feature='onehot'`` : one-hot symbols (feature cost is D_G-agnostic).
+
+    Parameters
+    ----------
+    X_symbolic : (n_sequences, n_nodes) int array, or a (ragged) list of int arrays
+        If already length ``n_nodes`` it is used as-is; otherwise every sequence is
+        resampled to ``n_nodes`` via :func:`smartflat.utils.utils.upsample_sequence`.
+    D_G : (G, G) ndarray
+        Prototype ground-cost matrix.
+    alpha : float in [0, 1]
+        FGW structure<->feature trade-off (POT: weight on the GW structure term). POT
+        documents the open interval ``0 < alpha < 1``; the endpoints run in POT 0.9.5 and
+        are the mathematically nested cases. ``alpha=0`` is clamped to a tiny epsilon only
+        if a future POT rejects the literal endpoint.
+    n_nodes : int
+        Number of barycenter nodes (= resampled length). O(n_nodes^2)/iteration -- gate.
+    feature : {'mds', 'onehot'}
+        Node-feature encoding (see above).
+    mds_dim : int, optional
+        Cap on MDS dimensionality (default: all positive-eigenvalue axes).
+    max_iter : int
+        POT FGW iterations.
+    random_state : int, optional
+        Seed for POT's random initialisation (init-stability across seeds).
+
+    Returns
+    -------
+    (n_nodes,) int array
+        Symbolic barycenter (continuous FGW feature centroids decoded to the nearest
+        prototype in the same feature space).
+    """
+    import ot
+
+    X = np.asarray(X_symbolic) if not isinstance(X_symbolic, list) else X_symbolic
+    if not isinstance(X, list) and getattr(X, 'ndim', 0) == 2 and X.shape[1] == n_nodes:
+        Xr = X.astype(int)
+    else:
+        from smartflat.utils.utils import upsample_sequence
+        Xr = np.vstack([
+            upsample_sequence(np.asarray(s).astype(int), n_nodes) for s in X_symbolic
+        ]).astype(int)
+
+    G = np.asarray(D_G).shape[0]
+    if feature == 'mds':
+        proto = _classical_mds(D_G, dim=mds_dim)          # (G, k)
+    elif feature == 'onehot':
+        proto = np.eye(G, dtype=np.float64)               # (G, G)
+    else:
+        raise ValueError(f"feature must be 'mds' or 'onehot', got {feature!r}")
+
+    Ys = [proto[x] for x in Xr]                            # each (n_nodes, d)
+    pos = np.arange(n_nodes, dtype=np.float64)[:, None]
+    C = np.abs(pos - pos.T)
+    cmax = C.max()
+    if cmax > 0:
+        C = C / cmax
+    Cs = [C for _ in range(len(Xr))]
+
+    a = max(float(alpha), 1e-9) if alpha <= 0 else float(alpha)
+    out = ot.gromov.fgw_barycenters(
+        N=n_nodes, Ys=Ys, Cs=Cs, alpha=a, max_iter=max_iter, random_state=random_state,
+    )
+    Xb = out[0]                                            # (n_nodes, d) continuous centroids
+    d = np.linalg.norm(Xb[:, None, :] - proto[None, :, :], axis=2)   # (n_nodes, G)
+    return d.argmin(axis=1).astype(np.int64)
+
+
 def default_baseline_methods(D_G, gamma=1.0, nu=0.001, lmbda=1.0, window=None):
     """Build the six standard-baseline registry for :func:`evaluate_baselines`.
 
@@ -927,6 +1035,35 @@ def extra_experiment_methods(D_G, G, nu=1e-4, lmbda=0.1, window=None, step_sequ=
             'build': lambda X, seed: barycenter_soft_mode_dba(
                 X, D_G, nu=nu, lmbda=lmbda, random_state=seed),
             'distance': lambda seq, bary: dist_neg_pmatch(
+                seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
+        },
+    }
+
+
+def fgw_methods(D_G, n_nodes=128, alpha=0.5, nu=1e-4, lmbda=0.1, window=None, mds_dim=None,
+                max_iter=100):
+    """Fused Gromov-Wasserstein barycenter registry (the representation-quality centrepiece).
+
+    Two entries, both built by :func:`barycenter_fgw` and scored by the native rTWE
+    distance (like ``k_medoid``): ``fgw_mds`` (classical-MDS node features, feature cost
+    ~ D_G) and ``fgw_onehot`` (one-hot node features, D_G-agnostic). ``alpha`` is the
+    frequency<->structure knob (POT weights the GW structure term). O(n_nodes^2)/iteration
+    -- keep ``n_nodes`` gated (default 128). Merge with ``|`` alongside
+    :func:`default_baseline_methods` / :func:`extra_experiment_methods` in the notebook.
+    """
+    return {
+        'fgw_mds': {
+            'build': lambda X, seed: barycenter_fgw(
+                X, D_G, alpha=alpha, n_nodes=n_nodes, feature='mds', mds_dim=mds_dim,
+                max_iter=max_iter, random_state=seed),
+            'distance': lambda seq, bary: dist_rtwe(
+                seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
+        },
+        'fgw_onehot': {
+            'build': lambda X, seed: barycenter_fgw(
+                X, D_G, alpha=alpha, n_nodes=n_nodes, feature='onehot',
+                max_iter=max_iter, random_state=seed),
+            'distance': lambda seq, bary: dist_rtwe(
                 seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
         },
     }

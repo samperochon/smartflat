@@ -684,3 +684,97 @@ always be read against the `spearman_length` column `structure_group_stats` emit
 group-correlated covariate); the predictive claim is the length-controlled one in §16.3. Artifacts under
 `$DATA_ROOT/outputs/symbolic_barycenter/g28/structure/` (`structure_metrics_table.csv`,
 `structure_group_stats.csv`, `incremental_structure_summary.csv`, `length_control_summary.csv`).
+
+---
+
+## 17. Barycenter-quality methods comparison — FGW + representation metrics (Kickoff F, 2026-07-02)
+
+**Branch `barycenter-quality-fgw`** (session **F** of the E→G→F arc; roadmap
+`.claude/plans/coordination-EFG-roadmap.md`, branched off G's tip). This arc **reframes the evaluation
+axis**: the group-*discrimination* question is settled (§12–§16; E's §15 = 0/15 order signals), so F asks
+which averaging method is the best **group representative** — judged on *representation fidelity*, not AUC.
+Shipped this session: the FGW barycenter + a method-agnostic quality harness + the first methods×metric
+table and α-decomposition. Soft-DTW/SSG/ShapeDBA/MSA are deferred to later arc sessions (per plan).
+
+### 17.1 Method + harness (reusable, in-package)
+
+- **`baselines.barycenter_fgw`** — Fused Gromov–Wasserstein barycenter (Vayer, Chapel, Flamary, Tavenard,
+  Courty, *ICML 2019* / *Algorithms 2020*; POT `ot.gromov.fgw_barycenters`). Each sequence is a graph
+  (nodes = timesteps, features = per-symbol vector, structure `C` = normalized `|i−j|`). POT weights **α**
+  on the **GW structure** term, so **α→0 = feature/frequency (Wasserstein)**, **α→1 = structure-only (GW)**.
+  Two node encodings: **`fgw_mds`** (classical-MDS of `D_G`, so α→0 ≈ the project's
+  `barycenter_wasserstein(D_G)`) and **`fgw_onehot`** (one-hot, D_G-agnostic). Continuous FGW centroids are
+  decoded to hard symbols by nearest prototype. Registry helper `baselines.fgw_methods` (same
+  `{build, distance}` contract, native rTWE distance). N=128 nodes; O(N²)/iter — length-gated.
+- **`barycenter_quality.score_barycenter_quality`** — scores any `{build, distance, kind}` registry method
+  identically, auto-dispatching over output kinds (sequence / histogram / medoid-index / transition-matrix).
+  Metrics: rTWE within-group inertia (common yardstick), native inertia, frequency fidelity
+  (Wasserstein-on-`D_G`), temporal-structure preservation (bigram Frobenius), symbol entropy + distinct +
+  segment counts, and init-stability. `quality_table` pivots to methods×metric; `build_fgw_registry` emits
+  a full α-sweep. Tests: `tests/test_barycenter_quality.py` (11, incl. FGW shape/determinism/α-knob and the
+  harness NaN-pattern/medoid/stability contracts). E/G frozen suites unchanged (**152 passed**).
+
+### 17.2 Methods × quality at G=28 (L=128; HEALTHY 24 / RIL 37 / TBI 59)
+
+Length-gated (mirrors 06c): the O(L²·G) embedding-space DTW baselines `dba_dtw` / `soft_dtw` (~130 s/group
+at L=128) are **excluded here**, deferred to a shorter-L / later run. Mean over groups:
+
+| method | freq_fidelity ↓ | entropy (bits) | rTWE inertia ↓ | struct_pres ↓ | n_distinct | n_segments |
+|---|---|---|---|---|---|---|
+| wasserstein (histogram) | **0.027** | 3.73 | — | — | 28 | — |
+| **fgw_onehot** | **0.038** | 3.55 | 76.3 | 3.29 | 18 | 113 |
+| **fgw_mds** | **0.043** | 3.50 | 78.8 | 3.27 | 17 | 114 |
+| edit_median | 0.090 | 3.54 | 46.0 | 2.59 | 17 | 58 |
+| shape_dba | 0.105 | 3.00 | 44.6 | 2.62 | 13 | 59 |
+| k_medoid | 0.120 | 3.35 | 46.5 | 2.71 | 16 | 54 |
+| **tw_twe_mode** (paper) | 0.120 | 3.02 | **44.8** | 2.66 | 13 | 57 |
+| majority_voting | 0.193 | 2.45 | **44.2** | 2.55 | 9 | 43 |
+| transition | — | — | — | ~0 (is the mean) | — | — |
+
+(group-sequence entropy reference ≈ 3.7 bits. Artifacts:
+`$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/barycenter_quality_methods_L128.csv`; per-method
+chronograms `chronogram_*.png`; notebook `06g_methods_chronogram.ipynb`.)
+
+- **FGW is the most frequency-faithful, least mode-collapsed structured averager**: it nearly matches the
+  `wasserstein` histogram on frequency fidelity (0.038–0.043 vs 0.027) and entropy (≈ 3.5 vs group ≈ 3.7),
+  while the paper's **`tw_twe_mode` collapses** (entropy 3.02, fidelity 0.120, only 13/28 symbols) — as does
+  `majority_voting` (2.45, 0.193, 9/28), the §12.3 mode-collapse made quantitative.
+- **The alignment methods win the rTWE yardstick** (`tw_twe_mode`/`majority_voting` ≈ 44 vs FGW ≈ 78): they
+  are the most *compact* summaries in the warped geometry they optimise. FGW optimises its own objective, not
+  rTWE — **an honest tradeoff, not a single winner**: which method is "best" depends on the chosen fidelity
+  axis. FGW is init-stable (rTWE-inertia std ≈ 1.3–1.7 of ≈ 78; histogram std ≈ 1e-3).
+
+### 17.3 FGW α-decomposition (the frequency↔structure knob)
+
+Full α∈{≈0, .25, .5, .75, 1} sweep, both encodings (**no cherry-picked α**):
+
+| α | freq_fidelity ↓ (mds / onehot) | entropy (mds / onehot) |
+|---|---|---|
+| ≈0 | 0.040 / 0.037 | 3.59 / 3.62 |
+| 0.5 | 0.043 / 0.037 | 3.52 / 3.54 |
+| 0.75 | 0.045 / 0.036 | 3.53 / 3.53 |
+| **1.0** | **0.259 / 0.190** | **2.97 / 2.47** |
+
+- For **α ≤ 0.75** FGW stays frequency-faithful (≈ 0.04) and entropy near the group level (≈ 3.5), and
+  **α→0 approaches the `wasserstein` histogram** — the nested special case confirmed empirically (POT
+  documents `0<α<1`; the α≈0 anchor validates it). At **α = 1** (structure-only GW) both **degrade sharply**.
+- **Adding pure temporal structure does not improve the group representative — it hurts it.** This is exactly
+  what E's §15 predicts (structure carries little content beyond frequency): **the α knob is understood, not
+  tuned to win.** Figure `fgw_alpha_decomposition.png`; table `barycenter_quality_fgw_alpha.csv`.
+
+### 17.4 Verdict & API
+
+The deliverable is the **library + reframe**: the barycenter is a *principled, ablation-justified averager*
+whose structure knob is characterised, not a frequency-beater. On representation, **FGW is the strongest
+frequency-faithful / anti-collapse structured average**, while the paper's mode-DBA is the most rTWE-compact
+— reported as an honest per-axis tradeoff. Consistent with the joint narrative: *frequency dominates (E);
+local execution structure is a separate real axis on Patient-vs-Control (G); the averager's frequency↔
+structure knob is understood and does not need to win (F).*
+
+**Public API** (recall from any session): `from smartflat.features.symbolic_barycenter.barycenter_quality
+import (score_barycenter_quality, quality_table, build_fgw_registry)` and
+`from smartflat.features.symbolic_barycenter.baselines import (barycenter_fgw, fgw_methods)`. Consumes E's
+shared loaders (`vocab.load_g28_cohort`, `vocab.build_g28_ground_cost`); touches `baselines.py` only to add
+FGW (CV helpers untouched). **Deferred (later arc sessions):** Soft-DTW / SSG subgradient, ShapeDBA
+(off-label for categorical), profile-HMM / progressive-MSA positional consensus, and `dba_dtw`/`soft_dtw` at
+a tractable length.
