@@ -519,3 +519,79 @@ converting the negative SDS2 result into a clean validity proof (operationalises
 needs design thought (how to generate it: permutation classes, motif insertion, or a process-model generator;
 how to match frequency across classes; what "order signal" to plant). Mirror this note into the paper repo's
 `ROADMAP.md` (`paper-chapter-6-barycenters/`) as future-work before scheduling a session.
+
+---
+
+## 15. Order evaluation — frequency-preserving shuffle-null ΔAUC (Kickoff E, 2026-06-30)
+
+**Branch `barycenter-order-eval`** (session E of the coordinated E→G→F arc; roadmap
+`.claude/plans/coordination-EFG-roadmap.md`). The decisive **higher-leverage** ordering probe the prior
+tests lacked. §12.7/§13.4 measured ordering with an *incremental* bigram block on top of the histogram —
+which overfits (`G²=784` features vs n≈60–120) and conflates "does order help" with "does this
+representation help". §15 replaces it with a **frequency-preserving order-shuffle null**: score the best
+order-aware classifier on the *intact* sequences and on many *within-sequence* shuffles that preserve each
+sequence's symbol multiset **exactly**, and report **ΔAUC = AUC_intact − mean(AUC_shuffled)** with a 95% CI
+from the shuffle distribution. Because the shuffle holds frequency fixed and the **same pipeline** scores
+intact and shuffled data, classifier optimism cancels in ΔAUC — the null is its own control.
+
+**Two nulls** (both per-sequence ⇒ the unigram histogram is exactly invariant): `token` (uniform
+permutation; destroys order **and** dwell → ΔAUC = all structure beyond bare frequency) and `runlength`
+(permute the order of runs; preserves per-symbol dwell-time distribution → ΔAUC = *pure sequencing*, frequency
+**and** dwell held). They coincide at segment-level (runs length-1) and separate at embedding-level.
+
+**Verdict: NEGATIVE across the board — 0 / 15 (comparison × feature × null) cells show an order signal**
+(pre-registered rule: order present iff ΔAUC 95% CI `ci_low > 0`). Native nested-CV (logreg, `RepeatedStratifiedKFold`
+2×5), `n_shuffles=100`, on the faithful G=28 cohort (HEALTHY 24 / RIL 37 / TBI 59).
+
+| rep | feature | null | comparison | AUC_intact | ΔAUC | 95% CI | p_perm |
+|---|---|---|---|---|---|---|---|
+| segment | transition | token | CONTROL_vs_PATIENT | 0.72 | +0.080 | [−0.043, +0.209] | 0.14 |
+| segment | transition | token | HEALTHY_vs_RIL | 0.78 | +0.039 | [−0.062, +0.148] | 0.28 |
+| segment | run_transition | token | RIL_vs_TBI | 0.68 | +0.045 | [−0.054, +0.141] | 0.20 |
+| embedding | transition | token | RIL_vs_TBI | 0.63 | **−0.073** | **[−0.132, −0.009]** | 0.98 |
+| embedding | transition | runlength | HEALTHY_vs_RIL | 0.84 | +0.096 | [−0.004, +0.221] | 0.05 |
+| embedding | transition | runlength | CONTROL_vs_PATIENT | 0.71 | +0.054 | [−0.058, +0.158] | 0.23 |
+| embedding | run_transition | runlength | RIL_vs_TBI | 0.66 | +0.042 | [−0.049, +0.143] | 0.22 |
+
+(Full 15-row table: `$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/order_shuffle_null_deltaAUC.csv`;
+ΔAUC-with-CI bar chart `…/order_shuffle_null_deltaAUC.png`, also embedded in NB `06f`.)
+
+- **Every CI brackets 0.** The two extremes only *strengthen* the negative: embedding `transition×token`
+  on **RIL-vs-TBI** has ΔAUC **−0.073, CI entirely below 0** — intact order *actively hurts* (the
+  dwell-dominated frame-bigram overfits the hardest comparison, exactly the §12.7 failure mode the null now
+  exposes cleanly). The single faint *hint* is embedding `transition×runlength` on **HEALTHY-vs-RIL**
+  (ΔAUC +0.096, CI [−0.004, +0.221], p=0.050) — lower bound −0.004, so **not** a signal under the
+  pre-registered rule; at most a candidate for a powered follow-up, not a result.
+- **Probe validated by construction** (`tests/test_order_evaluation.py`): a planted-order synthetic (identical
+  frequencies, different transition grammar) gives ΔAUC CI **> 0** (positive control), and a frequency-only
+  synthetic gives ΔAUC CI **bracketing 0** even at AUC_intact=1.0 (negative control — the null does not
+  hallucinate order from frequency). So the SDS2 negative is a real absence, not an underpowered probe.
+
+**Implication (consistent with §12–§14, now via the strongest available probe).** *The group-discriminative
+signal is in **which** actions occur and **how often**, not **in what order**.* This hardens the paper's
+central honest claim; it does **not** change `tab:baselines`. F reads this to set expectations (structure-
+awareness should matter little for discrimination on SDS2); the order question is settled absent here, and a
+positive demonstration needs the deferred synthetic ordering-sensitive dataset (§14, Deferred-D).
+
+### Shipped (reusable, in-package)
+
+- `smartflat/features/symbolic_barycenter/order_evaluation.py` — `token_shuffle`, `runlength_shuffle`,
+  `order_shuffle_null`, `run_transition_features` (dwell-invariant run-grammar bigrams), `order_information`
+  (the CI'd ΔAUC evaluator). `tests/test_order_evaluation.py` (18 tests incl. both controls). NB
+  `notebooks/06f_order_shuffle_null.ipynb`.
+- **Arc shared symbols (E owns; G & F import — pin to these):**
+  - `baselines._make_clf(name)` and `baselines._nested_cv_auc(F, y, splits, pipe, grid)` — extracted from
+    `evaluate_incremental_ordering` (refactored onto them; **behavior-identical, `test_baselines.py` 73/73
+    unchanged**). G's `evaluate_incremental_structure` and E's `order_information` both call the single
+    `_nested_cv_auc`.
+  - `vocab.load_g28_cohort(rep='int_cat_segm_embedding_labels', out_dir=None, upsample_to=None, …)` →
+    `(df, X_symbolic, labels)` and `vocab.build_g28_ground_cost(out_dir=None, offset_value=0.3,
+    method='max_rows_cols_pre')` → `D_G_cat (28,28)` — factored from 06c Cells 2–3.
+  - Full suite **91 passed**.
+- **Divergences from the roadmap contract (flagged):** (1) branched off the current HEAD
+  (`barycenter-faithful-s2`), **not `main`** — `main` was 4 commits behind and lacked §13/§14, so §15 could
+  not append "after §14" off it; the arc's serial-merge intent is preserved (my branch contains the
+  prerequisite state). (2) `load_g28_cohort` returns `X_symbolic` as a **ragged list** by default (the
+  embedding-level rep is genuinely ragged, L 2292–9570, so a bare `vstack` is impossible); pass
+  `upsample_to=L` for a rectangular `(n, L)` matrix. Per-sequence order/structure features need no rectangular
+  form, so this is strictly more faithful (no resample artifact). Everything else matches the contract.

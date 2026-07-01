@@ -1211,6 +1211,77 @@ def _pairwise_subsets(labels):
         yield name, mask, y
 
 
+def _make_clf(name):
+    """Return ``(sklearn Pipeline, param_grid)`` for ``name`` in {'logreg', 'rf'}.
+
+    Shared nested-CV estimator factory (extracted verbatim from
+    :func:`evaluate_incremental_ordering`'s former local ``make_estimator``), so the
+    incremental-ordering harness, the order-shuffle-null evaluator
+    (``order_evaluation.order_information``), and any structure-feature evaluator all
+    use one definition.
+
+    - ``logreg``: ``StandardScaler`` + ``LogisticRegression(penalty='l2',
+      solver='liblinear', max_iter=1000)``; grid ``{'clf__C': [0.01, 0.1, 1.0, 10.0]}``.
+    - ``rf``: ``RandomForestClassifier(random_state=0)``; grid
+      ``{'clf__n_estimators': [200], 'clf__max_depth': [3, 5, None]}``.
+    """
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier
+
+    if name == 'logreg':
+        pipe = Pipeline([
+            ('scale', StandardScaler()),
+            ('clf', LogisticRegression(
+                penalty='l2', solver='liblinear', max_iter=1000)),
+        ])
+        grid = {'clf__C': [0.01, 0.1, 1.0, 10.0]}
+    elif name == 'rf':
+        pipe = Pipeline([('clf', RandomForestClassifier(random_state=0))])
+        grid = {'clf__n_estimators': [200], 'clf__max_depth': [3, 5, None]}
+    else:
+        raise ValueError(f"unknown classifier {name!r}")
+    return pipe, grid
+
+
+def _nested_cv_auc(F, y, splits, pipe, grid):
+    """Per-fold held-out AUC via inner ``GridSearchCV(scoring='roc_auc')``.
+
+    The shared inner loop behind every nested-CV ordering/structure evaluator.
+
+    Parameters
+    ----------
+    F : np.ndarray of shape (n, d) -- feature matrix (already group-masked).
+    y : np.ndarray of shape (n,) -- binary int labels.
+    splits : list of (train_idx, test_idx) -- pre-enumerated so paired feature sets
+        are evaluated on identical folds.
+    pipe, grid : from :func:`_make_clf`.
+
+    Returns
+    -------
+    list of float -- one AUC per split (in ``splits`` order); ``0.5`` on a degenerate
+    single-class test fold. Inner-CV fold count is
+    ``max(2, int(min(5, min class count in y[train])))``. No global state;
+    deterministic given the inputs.
+    """
+    from sklearn.model_selection import GridSearchCV
+    from sklearn.metrics import roc_auc_score
+
+    aucs = []
+    for tr, te in splits:
+        inner = max(2, int(min(5, np.min(np.bincount(y[tr])))))
+        gs = GridSearchCV(pipe, grid, scoring='roc_auc', cv=inner)
+        gs.fit(F[tr], y[tr])
+        score = gs.predict_proba(F[te])[:, 1]
+        try:
+            auc = roc_auc_score(y[te], score)
+        except ValueError:
+            auc = 0.5
+        aucs.append(auc)
+    return aucs
+
+
 def evaluate_incremental_ordering(
     X_symbolic, labels, G, classifiers=('logreg', 'rf'),
     n_repeats=10, n_folds=5, random_state=42, n_boot=10000,
@@ -1250,33 +1321,13 @@ def evaluate_incremental_ordering(
         one row per (comparison, classifier): mean_auc_hist, mean_auc_both,
         mean_delta, delta_ci_low, delta_ci_high, wilcoxon_p, n_folds
     """
-    from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
-    from sklearn.pipeline import Pipeline
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.metrics import roc_auc_score
+    from sklearn.model_selection import RepeatedStratifiedKFold
     from scipy.stats import wilcoxon
 
     X_symbolic = np.asarray(X_symbolic)
     H = histogram_features(X_symbolic, G)
     T = transition_features(X_symbolic, G)
     feature_sets = {'hist': H, 'both': np.hstack([H, T])}
-
-    def make_estimator(name):
-        if name == 'logreg':
-            pipe = Pipeline([
-                ('scale', StandardScaler()),
-                ('clf', LogisticRegression(
-                    penalty='l2', solver='liblinear', max_iter=1000)),
-            ])
-            grid = {'clf__C': [0.01, 0.1, 1.0, 10.0]}
-        elif name == 'rf':
-            pipe = Pipeline([('clf', RandomForestClassifier(random_state=0))])
-            grid = {'clf__n_estimators': [200], 'clf__max_depth': [3, 5, None]}
-        else:
-            raise ValueError(f"unknown classifier {name!r}")
-        return pipe, grid
 
     fold_rows = []
     for comp, mask, y in _pairwise_subsets(labels):
@@ -1289,18 +1340,10 @@ def evaluate_incremental_ordering(
         # Enumerate splits ONCE so 'hist' and 'both' are evaluated on identical folds.
         splits = list(cv.split(np.zeros(mask.sum()), y))
         for clf_name in classifiers:
-            pipe, grid = make_estimator(clf_name)
+            pipe, grid = _make_clf(clf_name)
             for fs_name, F_full in feature_sets.items():
-                F = F_full[mask]
-                for k, (tr, te) in enumerate(splits):
-                    inner = max(2, int(min(5, np.min(np.bincount(y[tr])))))
-                    gs = GridSearchCV(pipe, grid, scoring='roc_auc', cv=inner)
-                    gs.fit(F[tr], y[tr])
-                    score = gs.predict_proba(F[te])[:, 1]
-                    try:
-                        auc = roc_auc_score(y[te], score)
-                    except ValueError:
-                        auc = 0.5
+                aucs = _nested_cv_auc(F_full[mask], y, splits, pipe, grid)
+                for k, auc in enumerate(aucs):
                     fold_rows.append({
                         'comparison': comp, 'classifier': clf_name,
                         'feature_set': fs_name,

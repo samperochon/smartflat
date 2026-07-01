@@ -46,6 +46,14 @@ The prior `06*` runs resampled every sequence to **L=64**, which *crippled* the 
 
 **Implication for `tab:baselines` (unchanged from §12, now full-length-confirmed):** report the honest frequency-competitive/superior table and reframe per §8 (design choices ablation-justified; group-discrimination claim qualified). Do **not** fill it with a proposed-method headline row.
 
+### 🔄 UPDATE (2026-06-30) — Kickoff E: frequency-preserving order-shuffle null (notebook `06f`; module `symbolic_barycenter/order_evaluation.py`)
+
+The decisive, self-calibrating replacement for the §12.7/§13.4 incremental-bigram ordering probe (which overfit the 784-dim block). E scores the best order-aware classifier on the *intact* sequences and on many *within-sequence shuffles that preserve each sequence's symbol multiset exactly*, reporting **ΔAUC = AUC_intact − mean(AUC_shuffled)** with a 95% CI from the shuffle distribution. Two nulls: `token` (destroys order + dwell) and `runlength` (preserves per-symbol dwell, destroys only run sequencing). Because the same pipeline scores intact and shuffled data, classifier optimism cancels in ΔAUC.
+
+- **Verdict NEGATIVE — 0 / 15 (comparison × feature × null) cells show an order signal** (rule: order present iff ΔAUC 95% CI lower bound > 0), on the faithful G=28 cohort (n=120). The two extremes strengthen it: embedding `transition×token` RIL-vs-TBI has ΔAUC **−0.073, CI [−0.132, −0.009]** (intact order *hurts*); the one faint hint (embedding `transition×runlength` HEALTHY-vs-RIL, +0.096, CI [−0.004, +0.221], p=0.050) fails the rule.
+- **Probe validated by construction** (`tests/test_order_evaluation.py`): planted-order synthetic → CI > 0; frequency-only synthetic → CI brackets 0 even at AUC=1.0. So the SDS2 negative is a real absence, not an underpowered probe.
+- **Implication (unchanged):** *the group signal is which actions occur and how often, not in what order.* Hardens the central honest claim; does **not** change `tab:baselines`. Full record: `RESULTS_HANDOFF_barycenters.md` §15. Coordination status (E landed; G/F pinned imports): `.claude/plans/coordination-EFG-roadmap.md` §8.
+
 ---
 
 ## 1. What the paper needs from this repo
