@@ -64,7 +64,7 @@ The framework processes video recordings from multiple camera sources (GoPro, To
   - `hands/` + `hands_processing/`: MediaPipe hand landmarks + temporal tracking
   - `skeleton/`: MediaPipe pose landmarks
   - `symbolization/`: Recursive prototyping pipeline — clustering, annotation, HAC, inference
-  - `symbolic_barycenter/`: TWE distance + DBA barycenter averaging
+  - `symbolic_barycenter/`: TWE distance + DBA barycenter averaging; `structure_metrics.py` (reusable per-sequence behavioral-structure metrics — perseveration, fragmentation, LZ complexity, drift — + leakage-guarded group analysis)
 
 - **`engine/`**: Analysis engines
   - `change_point_detection.py`: KCP/PELT with slope heuristic

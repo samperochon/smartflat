@@ -595,3 +595,92 @@ positive demonstration needs the deferred synthetic ordering-sensitive dataset (
   embedding-level rep is genuinely ragged, L 2292–9570, so a bare `vstack` is impossible); pass
   `upsample_to=L` for a rectangular `(n, L)` matrix. Per-sequence order/structure features need no rectangular
   form, so this is strictly more faithful (no resample artifact). Everything else matches the contract.
+
+---
+
+## 16. Behavioral-structure metrics — local disorganisation / perseveration (Kickoff G, 2026-07-01)
+
+**Branch `barycenter-structure-metrics`** (off E's tip `78d7ef4`). New module
+`smartflat/features/symbolic_barycenter/structure_metrics.py` + `tests/test_structure_metrics.py`
+(23 tests; full suite **187 passed** — the 2 `test_dataset.py` errors are pre-existing/unrelated).
+Reuses E's shared helpers (`_make_clf`, `_nested_cv_auc`, `load_g28_cohort`, `_rle`) — **no** re-copied
+CV loop, cohort cells, or RLE.
+
+**Motivation.** E (§15) settled that *global* symbol order carries no group signal beyond frequency
+(0/15 ΔAUC). G tests an **orthogonal** hypothesis: *local* execution structure — fragmentation,
+perseveration, complexity, temporal drift — that the frequency histogram **and** global-order tests both
+miss. The module is a first-class, vocabulary-agnostic, NaN-safe library of **per-sequence** metrics
+(transition entropy, immediate-repeat/switch rate, run-length & dwell stats, fragmentation index, n-gram
+coverage, normalised Lempel–Ziv, background fraction, first-vs-second-half drift), each a small
+unit-tested function, plus `compute_structure_metrics` (aggregator), `structure_features` (matrix),
+`structure_group_stats` (Cliff's δ + bootstrap CI + Hedges g + **BH across the full 48-test family**),
+and `evaluate_incremental_structure` (leakage-guarded nested CV; calls `_nested_cv_auc`).
+
+### 16.1 The result is a genuine POSITIVE — local structure adds signal beyond frequency
+
+Leakage-guarded incremental AUC, 10×5 RepeatedStratifiedKFold; struct = 13 de-collinearised metrics:
+
+| Comparison | clf | AUC hist | AUC struct-only | AUC both | Δ(both−hist) | Δ 95% CI |
+|---|---|---|---|---|---|
+| **CONTROL_vs_PATIENT** | logreg / rf | 0.74 / 0.74 | **0.81 / 0.81** | 0.81 / 0.82 | **+0.069 / +0.077** | **[0.045,0.093] / [0.044,0.111]** |
+| HEALTHY_vs_RIL | logreg / rf | 0.85 / 0.88 | 0.83 / 0.83 | 0.90 / 0.89 | +0.051 / +0.018 | [0.017,0.085] / [−0.012,0.048] |
+| RIL_vs_TBI | logreg / rf | 0.70 / 0.73 | 0.65 / 0.61 | 0.72 / 0.73 | +0.020 / −0.002 | [0.001,0.039] / [−0.022,0.017] |
+
+Patient-vs-Control: structure alone reaches 0.81 (vs hist 0.74) and the incremental Δ over frequency
+excludes 0 for **both** classifiers — the honest positive E's global-order test did not find. HEALTHY-vs-RIL
+is partial (logreg only, hist already strong); RIL-vs-TBI null.
+
+### 16.2 Descriptive per-metric group stats (Cliff's δ, BH over 48 tests) — with a length caveat
+
+24 / 48 (metric × comparison) tests survive BH, **but sequence length is a group-correlated confound**
+(RIL median L≈6215 > HEALTHY≈4330), and several metrics scale with L. Splitting the BH-significant metrics
+by their Spearman-with-length `r_L`:
+
+- **Length-robust (|r_L| < 0.3) — the genuine local-structure signals:** `fragmentation_index`
+  (Ctrl-vs-Pat δ=+0.48, r_L=0.23 — **patients more fragmented**), `halves_tv_distance` /
+  `halves_js_divergence` (δ≈−0.48 / −0.42, r_L≈−0.05 — **patients drift *less*** between task halves: more
+  uniform, less phase-structured execution), `transition_entropy` (HEALTHY-vs-RIL δ=+0.37),
+  `trigram_coverage` (δ=+0.44). `background_fraction` also separates (δ=+0.34) but is a frequency
+  restatement (histogram bin 0), not structure.
+- **Length-driven (|r_L| ≥ 0.5) — read with caution:** `immediate_repeat_rate` / `switch_rate` (|r_L|=0.88),
+  `run_length_mean` (0.88), `run_length_max` (0.53), `dwell_mean_over_states` (0.73). Their separation
+  largely reflects RIL's longer administrations, not perseveration per se.
+- `lz76_complexity`, `run_length_cv`, `dwell_cv`, `bigram_coverage` separate no group.
+
+### 16.3 Length control — the Patient-vs-Control gain survives; HEALTHY-vs-RIL does not
+
+Length **alone** separates groups (Cliff's δ: HEALTHY-vs-RIL **+0.72**, Ctrl-vs-Pat **+0.49**,
+RIL-vs-TBI **−0.40**) and adds held-out AUC over frequency (e.g. Ctrl-vs-Pat 0.74→0.77–0.79; HEALTHY-vs-RIL
+0.88→0.94 rf) — a real confound, not just a metric-level correlation. The decisive test — shipped as the
+recallable `evaluate_structure_length_controlled` — is the incremental AUC of struct over `[hist ⊕ length]`
+(structure beyond frequency **and** duration):
+
+| Comparison | clf | Δ(struct \| hist+len) | 95% CI | verdict |
+|---|---|---|---|---|
+| **CONTROL_vs_PATIENT** | logreg / rf | **+0.038 / +0.033** | **[0.014,0.061] / [0.008,0.059]** | **survives — both clf** |
+| HEALTHY_vs_RIL | logreg / rf | +0.006 / −0.032 | [−0.019,0.031] / [−0.048,−0.017] | does **not** survive (was length) |
+| RIL_vs_TBI | logreg / rf | −0.001 / −0.016 | [−0.015,0.013] / [−0.034,0.002] | null |
+
+**The Patient-vs-Control structure signal is real beyond both frequency and length** (Δ +0.033–0.038, CI
+excludes 0, both classifiers). The apparent **HEALTHY-vs-RIL** structure gain is a **duration effect** —
+it vanishes (logreg) or reverses (rf) once length is controlled. **RIL-vs-TBI** is null throughout.
+
+### 16.4 Verdict & API
+
+The deliverable is the **library**; the honest scientific finding is a **length-robust positive for local
+execution structure on Patient-vs-Control** — a clinically-motivated axis (patients are more *fragmented*,
+drift *less* across task phases, and differ in transition entropy) that neither the frequency histogram nor
+E's global-order test captures — while HEALTHY-vs-RIL reduces to sequence duration and RIL-vs-TBI is null.
+This is orthogonal to §15 (global order) and complements the joint narrative: *frequency dominates global
+discrimination (E); local execution structure is a separate, real axis on Patient-vs-Control (G).*
+
+**Public API** (recall from any session):
+`from smartflat.features.symbolic_barycenter.structure_metrics import (compute_structure_metrics,
+structure_features, structure_group_stats, evaluate_incremental_structure,
+evaluate_structure_length_controlled)` — plus the individual per-sequence metric functions (all
+vocabulary-agnostic, NaN-safe; `on={'embedding','segment'}` where a representation choice exists).
+**Honest-use notes baked into the API:** metric-level group tests should
+always be read against the `spearman_length` column `structure_group_stats` emits (length is a
+group-correlated covariate); the predictive claim is the length-controlled one in §16.3. Artifacts under
+`$DATA_ROOT/outputs/symbolic_barycenter/g28/structure/` (`structure_metrics_table.csv`,
+`structure_group_stats.csv`, `incremental_structure_summary.csv`, `length_control_summary.csv`).
