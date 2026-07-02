@@ -54,6 +54,14 @@ The decisive, self-calibrating replacement for the §12.7/§13.4 incremental-big
 - **Probe validated by construction** (`tests/test_order_evaluation.py`): planted-order synthetic → CI > 0; frequency-only synthetic → CI brackets 0 even at AUC=1.0. So the SDS2 negative is a real absence, not an underpowered probe.
 - **Implication (unchanged):** *the group signal is which actions occur and how often, not in what order.* Hardens the central honest claim; does **not** change `tab:baselines`. Full record: `RESULTS_HANDOFF_barycenters.md` §15. Coordination status (E landed; G/F pinned imports): `.claude/plans/coordination-EFG-roadmap.md` §8.
 
+### 🔄 UPDATE (2026-07-01) — Kickoff G: behavioral-structure metrics (notebook `06h`; module `symbolic_barycenter/structure_metrics.py`)
+
+Tests a hypothesis **orthogonal** to E's global-order null: *local* execution structure (fragmentation, perseveration, transition entropy, first-vs-second-half drift) that both the frequency histogram and the global-order tests miss. A reusable, vocabulary-agnostic, NaN-safe library of 15 per-sequence metrics + leakage-guarded group analysis (Cliff's δ + bootstrap CI + BH over the 48-test family; nested-CV incremental AUC reusing E's `_nested_cv_auc`).
+
+- **Verdict POSITIVE (and length-robust) on Patient-vs-Control** — struct-only held-out AUC **0.81** vs frequency 0.74; incremental over frequency **+0.069/+0.077** (95% CI excludes 0, both classifiers), and it **survives length control** (struct beyond `hist ⊕ length`: **+0.033/+0.038**, CI excludes 0). Length-robust separators: `fragmentation_index`, first/second-half `drift` (patients drift *less*), `transition_entropy`.
+- **Honest caveat:** sequence **length is group-correlated** (RIL longer) and perseveration/run-length/dwell metrics scale with L — their raw group separation is largely duration. **HEALTHY-vs-RIL structure gain is a length effect** (vanishes after control); **RIL-vs-TBI null**. Read metric-level claims against the `spearman_length` column.
+- **Implication for the paper:** a *new, honestly-qualified positive axis* — local execution structure discriminates Patient-vs-Control where global order does not — distinct from `tab:baselines` (barycenter discrimination) and not a frequency-beater there. Full record: `RESULTS_HANDOFF_barycenters.md` §16. Coordination status (E+G landed; F next, pinned imports): `.claude/plans/coordination-EFG-roadmap.md` §9.
+
 ---
 
 ## 1. What the paper needs from this repo
