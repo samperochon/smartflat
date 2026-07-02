@@ -312,6 +312,84 @@ def barycenter_soft_dtw(X_symbolic, D_G, gamma=1.0, max_iter=30, random_state=No
     return project_real_to_symbolic(barycenter, D_G)
 
 
+def barycenter_softdtw(X_symbolic, D_G, gamma=1.0, max_iter=50, random_state=None):
+    """Soft-DTW barycenter (Cuturi & Blondel, ICML 2017) via tslearn's L-BFGS-B solver.
+
+    Library-backed counterpart to the hand-rolled :func:`barycenter_soft_dtw`: the
+    symbolic sequences are embedded into real space by their ``D_G`` rows
+    (:func:`embed_symbolic_to_real`), averaged with ``tslearn.barycenters.softdtw_barycenter``
+    (minimises the Frobenius-regularised soft-DTW Frechet functional), and the continuous
+    centroid is decoded back to hard symbols by nearest ``D_G`` row
+    (:func:`project_real_to_symbolic`). ``gamma -> 0`` recovers DTW.
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length).
+    D_G : np.ndarray of shape (G, G)
+        Prototype ground-cost matrix (the embedding).
+    gamma : float
+        Soft-DTW smoothing parameter (larger = smoother).
+    max_iter : int
+        Maximum L-BFGS-B iterations.
+    random_state : int or None
+        Accepted for the ``{build, distance}`` registry contract but unused: the
+        L-BFGS-B barycenter is deterministic (Euclidean-mean initialisation).
+
+    Returns
+    -------
+    np.ndarray of shape (n_timepoints,)
+        Symbolic barycenter sequence (integer-valued).
+    """
+    try:
+        from tslearn.barycenters import softdtw_barycenter
+    except ImportError as exc:  # pragma: no cover - exercised only without tslearn
+        raise ImportError(
+            "barycenter_softdtw requires tslearn. Install with: pip install tslearn"
+        ) from exc
+    X_emb = embed_symbolic_to_real(X_symbolic, D_G)  # (N, T, G)
+    bary = softdtw_barycenter(X_emb, gamma=gamma, max_iter=max_iter)  # (T, G)
+    return project_real_to_symbolic(np.asarray(bary), D_G)
+
+
+def barycenter_ssg(X_symbolic, D_G, max_iter=30, random_state=None):
+    """Stochastic-subgradient DTW averaging (SSG; Schultz & Jain, Pattern Recognition 2018).
+
+    Uses ``tslearn.barycenters.dtw_barycenter_averaging_subgradient`` on the ``D_G``
+    embedding (:func:`embed_symbolic_to_real`), decoding the continuous centroid back to
+    hard symbols by nearest ``D_G`` row (:func:`project_real_to_symbolic`). Unlike DBA's
+    full batch mean-under-alignment update, SSG takes stochastic subgradient steps over the
+    DTW Frechet functional; the update order is seeded by ``random_state`` (reproducible).
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length).
+    D_G : np.ndarray of shape (G, G)
+        Prototype ground-cost matrix (the embedding).
+    max_iter : int
+        Maximum subgradient epochs.
+    random_state : int or None
+        Seed for the stochastic update order (determinism guarantee).
+
+    Returns
+    -------
+    np.ndarray of shape (n_timepoints,)
+        Symbolic barycenter sequence (integer-valued).
+    """
+    try:
+        from tslearn.barycenters import dtw_barycenter_averaging_subgradient
+    except ImportError as exc:  # pragma: no cover - exercised only without tslearn
+        raise ImportError(
+            "barycenter_ssg requires tslearn. Install with: pip install tslearn"
+        ) from exc
+    X_emb = embed_symbolic_to_real(X_symbolic, D_G)  # (N, T, G)
+    bary = dtw_barycenter_averaging_subgradient(
+        X_emb, max_iter=max_iter, random_state=random_state,
+    )  # (T, G)
+    return project_real_to_symbolic(np.asarray(bary), D_G)
+
+
 def barycenter_edit_median(X_symbolic, n_alphabet, max_iter=20):
     """Baseline A7: Edit-distance median string via iterative local search.
 
@@ -1063,6 +1141,38 @@ def fgw_methods(D_G, n_nodes=128, alpha=0.5, nu=1e-4, lmbda=0.1, window=None, md
             'build': lambda X, seed: barycenter_fgw(
                 X, D_G, alpha=alpha, n_nodes=n_nodes, feature='onehot',
                 max_iter=max_iter, random_state=seed),
+            'distance': lambda seq, bary: dist_rtwe(
+                seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
+        },
+    }
+
+
+def softdtw_ssg_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
+                        sdtw_max_iter=50, ssg_max_iter=30):
+    """Library-backed Soft-DTW + SSG barycenter registry (mirrors :func:`fgw_methods`).
+
+    Two ``{build, distance}`` entries scored by :func:`score_barycenter_quality` exactly
+    like the other methods:
+
+    - ``soft_dtw_bary`` -- :func:`barycenter_softdtw` (Cuturi & Blondel, ICML 2017),
+      paired with its NATIVE soft-DTW distance (:func:`dist_soft_dtw`).
+    - ``ssg`` -- :func:`barycenter_ssg` (Schultz & Jain, Pattern Recognition 2018), paired
+      with the NATIVE rTWE distance (:func:`dist_rtwe`, like ``fgw_*``/``k_medoid``).
+
+    Both embed via ``D_G`` and decode to hard symbols, so the harness auto-computes every
+    axis. O(L^2)/iteration -- length-gated (cheap at L=128 with tslearn's compiled solver;
+    the full-length L~5162 / full-cohort run is a scale job). Merge with ``|`` alongside
+    :func:`default_baseline_methods` / :func:`fgw_methods` in the notebook.
+    """
+    return {
+        'soft_dtw_bary': {
+            'build': lambda X, seed: barycenter_softdtw(
+                X, D_G, gamma=gamma, max_iter=sdtw_max_iter, random_state=seed),
+            'distance': lambda seq, bary: dist_soft_dtw(seq, bary, D_G, gamma=gamma),
+        },
+        'ssg': {
+            'build': lambda X, seed: barycenter_ssg(
+                X, D_G, max_iter=ssg_max_iter, random_state=seed),
             'distance': lambda seq, bary: dist_rtwe(
                 seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
         },

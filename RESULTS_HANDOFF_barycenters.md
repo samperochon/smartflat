@@ -779,3 +779,81 @@ shared loaders (`vocab.load_g28_cohort`, `vocab.build_g28_ground_cost`); touches
 FGW (CV helpers untouched). **Deferred (later arc sessions):** Soft-DTW / SSG subgradient, ShapeDBA
 (off-label for categorical), profile-HMM / progressive-MSA positional consensus, and `dba_dtw`/`soft_dtw` at
 a tractable length.
+
+---
+
+## 18. Library-backed Soft-DTW + SSG barycenters into the quality harness (Kickoff F·S2, 2026-07-02)
+
+**Branch `barycenter-quality-fgw`** (session **F·S2**, continuing F on the same branch). Adds the two
+averagers §17 deferred — now **library-backed (tslearn 0.8.1), not hand-rolled** — and scores them with the
+**existing** §17 harness (extend-by-reuse; **no harness change**). Method-development + **gated preview**
+session: implement, unit-test, and print a G=28 preview at L=128; the full-length (L≈5162) / full-cohort run
+is a **`pomme` hand-off** (stub in `06i`, not run locally).
+
+### 18.1 Methods (reusable, in-package)
+
+- **`baselines.barycenter_softdtw`** — Soft-DTW barycenter (Cuturi & Blondel, *ICML 2017*) via
+  `tslearn.barycenters.softdtw_barycenter` (L-BFGS-B) on the `D_G` embedding
+  (`embed_symbolic_to_real`), decoded to hard symbols (`project_real_to_symbolic`). `gamma→0` → DTW.
+  **Deterministic** (Euclidean-mean init; `random_state` accepted for the registry contract but unused).
+- **`baselines.barycenter_ssg`** — Stochastic-subgradient DTW averaging (SSG; Schultz & Jain, *Pattern
+  Recognition 2018*) via `tslearn.barycenters.dtw_barycenter_averaging_subgradient`; same embed→decode
+  adapter; **reproducible under a fixed `random_state`**.
+- **`baselines.softdtw_ssg_methods`** — `{build, distance}` registry (mirrors `fgw_methods`): `soft_dtw_bary`
+  scored by its **native soft-DTW** distance (`dist_soft_dtw`), `ssg` by the **native rTWE** distance
+  (`dist_rtwe`, like `fgw_*`/`k_medoid`). Both output symbol sequences ⇒ the harness auto-computes every axis.
+  tslearn is a **lazy optional import** (install-hint on `ImportError`, matching the `aeon`/`ot` convention).
+- Tests: `tests/test_barycenter_softdtw_ssg.py` (6, `pytest.importorskip('tslearn')`: shape/valid-symbol/
+  determinism for both, SSG seed-sensitivity, embedding round-trip, harness integration + `quality_table`
+  pivot). `pytest tests/test_barycenter_softdtw_ssg.py tests/test_barycenter_quality.py -q` → **17 passed**;
+  E/G frozen suites (`test_order_evaluation`/`test_structure_metrics`/`test_baselines`/`test_barycenter_dba`)
+  → **117 passed**, unchanged.
+
+### 18.2 Extended methods × quality at G=28 (L=128, **gated preview budget**; HEALTHY 24 / RIL 37 / TBI 59)
+
+Reduced budget (`soft_dtw_bary`/`ssg` `max_iter=10`, `n_inits=2`). **Not the scale run** — full length /
+full cohort deferred to pomme. tslearn is compiled, so at L=128 these run ~2–5 s/group (vs §17's ~130 s/group
+pure-numpy `soft_dtw`/`dba_dtw`, still omitted). Mean over groups (group-sequence entropy ref ≈ 3.78 bits):
+
+| method | freq_fidelity ↓ | entropy (bits) | rTWE inertia ↓ | struct_pres ↓ | n_distinct | n_segments |
+|---|---|---|---|---|---|---|
+| wasserstein (histogram) | **0.027** | 3.73 | — | — | 28 | — |
+| fgw_onehot | 0.037 | 3.55 | 75.8 | 3.28 | 18 | 111 |
+| fgw_mds | 0.044 | 3.50 | 77.8 | 3.27 | 17 | 113 |
+| **ssg** | 0.138 | 3.24 | **47.1** | 2.94 | 16 | 65 |
+| **soft_dtw_bary** | 0.165 | 3.17 | **48.7** | 2.93 | 14 | 26 |
+| tw_twe_mode (paper) | 0.120 | 3.02 | **44.8** | 2.66 | 13 | 57 |
+
+(Artifacts: `$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/barycenter_quality_softdtw_ssg_L128.csv`;
+per-method chronograms `chronogram_{soft_dtw_bary,ssg,fgw_onehot,tw_twe_mode}.png`; notebook
+`06i_softdtw_ssg_quality.ipynb`.)
+
+- **Both new methods land on the §17 tradeoff frontier — no new winner.** As DTW-family alignment averagers
+  they are **rTWE-compact** (≈ 47–49, near the paper's `tw_twe_mode` ≈ 45 and far tighter than FGW ≈ 76–78),
+  but they trade that off against **frequency fidelity** (0.14–0.17 vs the histogram's 0.027 and FGW's
+  0.037–0.044) and **entropy** (partial mode-collapse: 3.2–3.3 vs group ≈ 3.78). They sit *between* FGW
+  (frequency-faithful, anti-collapse) and `tw_twe_mode` (most rTWE-compact, most collapsed) — two more
+  principled points on the same frontier, consistent with §17's "best depends on the chosen fidelity axis."
+- **`soft_dtw_bary` collapses more than `ssg`** (14 distinct / 26 segments / entropy 3.17 vs 16 / 65 / 3.24):
+  the soft-DTW centroid is smoother, so decoding yields longer runs of few symbols. Its `inertia_native` is
+  the soft-DTW *discrepancy* (negative, −54, as expected for the γ-regularised cost) — not comparable across
+  methods; use the common `inertia_rtwe` yardstick.
+- **Stability** (`n_inits=3`): `soft_dtw_bary` deterministic (rTWE-inertia std = 0.000); `ssg` std ≈ 0.86 on
+  ≈ 47 (≈ 1.8% — modestly init-stable).
+
+### 18.3 Verdict & API
+
+Two more **principled, library-backed** averagers now score through the same harness; they confirm — rather
+than overturn — §17's honest per-axis tradeoff (rTWE-compact but less frequency-faithful, with `soft_dtw_bary`
+the more collapse-prone). No cherry-picked winner. Consistent with the joint narrative: *frequency dominates
+discrimination (E); local structure is a separate real axis on Patient-vs-Control (G); the averagers are a
+characterised family on a frequency↔structure–vs–warp-compactness frontier, not frequency-beaters (F).*
+
+**Public API** (recall from any session): `from smartflat.features.symbolic_barycenter.baselines import
+(barycenter_softdtw, barycenter_ssg, softdtw_ssg_methods)`, scored via the unchanged
+`barycenter_quality.{score_barycenter_quality, quality_table}`. Consumes E's shared loaders
+(`vocab.load_g28_cohort`, `vocab.build_g28_ground_cost`); touches `baselines.py` only to add the two builders
++ registry (CV helpers / FGW untouched). tslearn is an optional dependency (lazy import).
+**Pomme hand-off:** `06i` final cell documents the full-length (L≈5162) / full-cohort / full-budget
+invocation, clearly marked NOT run locally. **Deferred (later sessions):** ShapeDBA (off-label for
+categorical), profile-HMM / progressive-MSA positional consensus (S3), and the pomme scale run.
