@@ -889,3 +889,80 @@ yardstick (on decoded symbols) *and* reports each on its native distance — the
 `D_G`-argmin decode (ground-cost-consistent snap, reported as an Euclidean-vs-`D_G` ablation); Lever 3 =
 per-iteration re-discretisation for `dba_dtw`/`ssg` (a categorical variant reported *alongside* the continuous
 ones). Both additive, ablation-reported, harness-reused, tests-first.
+
+---
+
+## 19. MSA positional-consensus barycenter into the quality harness (Kickoff F·S3, 2026-07-02)
+
+**Branch `barycenter-quality-fgw`** (session **F·S3**, the **last method in the F roster**, continuing F on
+the same branch). Adds **one** principled positional-consensus averager — the **Family-A native-categorical**
+counterpart to F·S1's FGW and F·S2's Soft-DTW/SSG (all **Family B**) — and scores it with the **existing** §17
+harness (extend-by-reuse; **no harness change**). Method-development + **gated preview** session: implement,
+unit-test, and print a G=28 preview at L=128; the full-length (L≈5162) / full-cohort run is a **`pomme`
+hand-off** (stub in `06j`, not run locally). No new dependency — reuses only the vendored rTWE aligner.
+
+### 19.1 Method (reusable, in-package)
+
+- **`baselines.barycenter_msa_consensus`** — **center-star MSA + profile per-column consensus**, entirely in
+  symbol space (**no `D_G` embedding, no decode** — the defining Family-A property). Algorithm: (1) pick the
+  star **center** = within-group rTWE **medoid**; (2) align every member pairwise to the center via the
+  vendored `rtwe_alignment_path` (the same aligner as the paper's `tw_twe_mode`); (3) **merge** the
+  pairwise-to-center alignments into one multiple alignment with insertion columns ("once a gap, always a
+  gap"); (4) **profile consensus** — Laplace-`pseudocount` argmax per column (mode is the `pseudocount→0`
+  limit); (5) **occupancy rule** — keep only columns whose non-gap occupancy ≥ `occupancy` (0.5 match-state
+  rule), yielding a gap-free symbol sequence. **Deterministic** (medoid center + argmax; `random_state`
+  accepted for the registry contract but unused). Cites Gusfield 1993 (center-star, 2-approximation);
+  Feng–Doolittle 1987 / ClustalW (Thompson 1994); Durbin, Eddy, Krogh & Mitchison 1998 (profile HMM,
+  pseudocounts, occupancy match-state rule) — all verified via `literature-grounder`.
+- **`baselines.msa_consensus_methods`** — `{build, distance}` registry (mirrors `softdtw_ssg_methods`):
+  `msa_consensus` scored by the **native rTWE** distance (`dist_rtwe`, like `ssg`/`fgw_*`/`k_medoid`). Output
+  is a genuine symbol sequence ⇒ the harness auto-computes every axis.
+- Tests: `tests/test_barycenter_msa_consensus.py` (7, **no `importorskip`** — no new dep): shape/valid-symbol/
+  stays-in-`[0,G)`, determinism, **consensus of identical sequences == that sequence**, ragged
+  insertion/deletion handling, `pseudocount→0` recovers hard mode, harness integration + `quality_table`
+  pivot. `pytest tests/test_barycenter_msa_consensus.py tests/test_barycenter_softdtw_ssg.py
+  tests/test_barycenter_quality.py tests/test_order_evaluation.py tests/test_structure_metrics.py
+  tests/test_baselines.py -q` → **139 passed** (E/F/G frozen suites unchanged).
+
+### 19.2 Extended methods × quality at G=28 (L=128, **gated preview budget**; HEALTHY 24 / RIL 37 / TBI 59)
+
+Deterministic build (`n_inits=2` for the shared table). **Not the scale run** — full length / full cohort
+deferred to `pomme`. Group-sequence entropy reference ≈ **3.78 bits**. `inertia_rtwe` ↓ = more compact;
+`freq_fidelity` (Wasserstein-on-`D_G`) ↓ = better; `struct_preservation` (bigram Frobenius) ↓ = better.
+
+| method | family | inertia_rtwe | freq_fidelity | struct_pres | entropy_bits | n_distinct | n_segments |
+|---|---|---|---|---|---|---|---|
+| **`msa_consensus`** | **A** | **44.36** | 0.114 | 2.597 | 3.142 | 13.7 | 52.7 |
+| `tw_twe_mode` | A | 44.79 | 0.120 | 2.661 | 3.022 | 13.3 | 56.7 |
+| `ssg` | B | 47.14 | 0.138 | 2.940 | 3.237 | 16.0 | 65.0 |
+| `soft_dtw_bary` | B | 48.72 | 0.165 | 2.929 | 3.165 | 13.7 | 26.3 |
+| `fgw_onehot` | B | 75.79 | 0.037 | 3.279 | 3.545 | 18.0 | 111.2 |
+| `fgw_mds` | B | 77.81 | 0.044 | 3.268 | 3.504 | 17.5 | 113.2 |
+| `wasserstein` | A (freq) | — | 0.027 | — | 3.729 | 28.0 | — |
+
+Init-stability: `msa_consensus` is **deterministic** → `stability_inertia_rtwe = 0.0` exactly.
+
+### 19.3 Honest per-axis reading (no cherry-picked winner)
+
+`msa_consensus` lands right next to its precedent `tw_twe_mode` — as expected for a Family-A alignment voter —
+**marginally more rTWE-compact** (44.36 vs 44.79) and **slightly less collapsed** (3.14 vs 3.02 bits, i.e. the
+occupancy-gated insertion columns retain a touch more symbol diversity), with similar frequency fidelity. It is
+**not** a new leaderboard winner: `wasserstein` still owns frequency fidelity (0.027) and the anti-collapse
+`fgw_*` still keep the most entropy (~3.5 bits, closest to the 3.78-bit reference). The point is
+**representativeness, not a race**: `msa_consensus` is the **statistically-principled Family-A positional
+consensus** (a proper MSA with insertion columns + a profile/occupancy rule), offered as the native-categorical
+alternative to the ad-hoc lock-step `majority_voting` and the iterative single-reference `tw_twe_mode`. Fairness
+frame unchanged from §18.4: common rTWE yardstick + each method's native distance; both families reported.
+
+### 19.4 Artifacts + `pomme` hand-off
+
+- Notebook **`06j_msa_consensus_quality.ipynb`** (committed with figures) — registry merge with the §17/§18
+  anchors, extended methods×quality table with the `family` column, deterministic-stability check, 4 chronograms
+  (`msa_consensus`, `tw_twe_mode`, `ssg`, `fgw_onehot`), and the **`pomme` scale stub (not run locally)**.
+- Outputs: `$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/barycenter_quality_msa_consensus_L128.csv`
+  + `chronogram_msa_*.png`.
+- **Deferred to `pomme`** (`# --- run at scale on pomme ---` in `06j`): the full-length (L≈5162, no upsample)
+  / full-cohort `score_barycenter_quality` run. Dominant cost is the O(n²·L²) pairwise-rTWE **medoid**
+  selection (~1600× the L=128 per-cell cost). The **optional profile-HMM decode** (`hmmlearn.CategoricalHMM`)
+  + any new dependency were **explicitly deferred** — not justified for the core positional consensus.
+- `BARYCENTER_METHOD_DISCRETENESS.md` Family-A table gains the `msa_consensus` row.

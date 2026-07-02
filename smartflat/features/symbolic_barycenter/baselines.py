@@ -598,6 +598,122 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=0.001, lmbda=1.0, max_iter=10, rando
     return ref
 
 
+def barycenter_msa_consensus(X_symbolic, D_G, nu=1e-4, lmbda=0.1, window=None,
+                             pseudocount=1.0, occupancy=0.5, random_state=None):
+    """Center-star MSA + profile positional consensus (Family A, native-categorical).
+
+    A statistically-principled positional consensus for symbolic sequences that stays
+    entirely in symbol space -- no ``D_G`` embedding and no decode (contrast the Family-B
+    ``dba_dtw``/``soft_dtw_bary``/``ssg``/``fgw_*``). The cooking task is a *recipe*, so a
+    per-position probabilistic consensus is the natural Family-A generalisation of
+    :func:`barycenter_majority_voting` (multiple alignment instead of lock-step) and of
+    :func:`barycenter_mode_dba` (a proper multiple alignment with insertion columns and an
+    occupancy rule, instead of an iterative single reference whose length is clamped to the
+    reference).
+
+    Algorithm -- **center-star MSA** (Gusfield 1993; 2-approximation for a metric cost)
+    with a **profile per-column consensus** (Durbin, Eddy, Krogh & Mitchison 1998):
+
+    1. Pick the star **center** = within-group rTWE medoid (argmin summed pairwise rTWE).
+    2. Align every member pairwise to the center via :func:`rtwe_alignment_path` (the same
+       vendored aligner used by ``mode_dba``); the center's positions are the alignment
+       backbone, extra member symbols mapped to one center column are **insertions**.
+    3. **Merge** the pairwise-to-center alignments into one MSA, padding insertions with
+       gaps ("once a gap, always a gap"; Feng-Doolittle 1987 / ClustalW, Thompson 1994).
+    4. **Profile consensus:** per MSA column, add ``pseudocount`` (Laplace) to the symbol
+       counts and take the argmax; ``mode`` voting is the ``pseudocount -> 0`` special case.
+    5. **Occupancy rule:** keep only columns whose non-gap occupancy >= ``occupancy`` (the
+       50% match-state rule; Durbin et al. 1998, Ch. 5), yielding a gap-free symbol sequence.
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length under the L=128 harness).
+    D_G : np.ndarray of shape (G, G)
+        Ground-cost matrix used inside the rTWE alignment / medoid selection.
+    nu, lmbda : float
+        rTWE stiffness / edit penalty.
+    window : float or None
+        Sakoe-Chiba band passed to the rTWE aligner.
+    pseudocount : float
+        Laplace pseudocount added to every symbol's per-column count (>0 -> profile,
+        ->0 -> hard mode).
+    occupancy : float
+        Minimum non-gap fraction for a column to survive into the consensus.
+    random_state : int or None
+        Unused; the method is deterministic. Kept for a uniform ``build(X, seed)`` signature.
+
+    Returns
+    -------
+    np.ndarray of shape (n_consensus_timepoints,)
+        Gap-free symbolic barycenter; a genuine symbol sequence in ``[0, G)``.
+
+    References
+    ----------
+    Gusfield (1993), Bull. Math. Biol. 55:141. Feng & Doolittle (1987), J. Mol. Evol.
+    25:351. Thompson, Higgins & Gibson (1994), Nucleic Acids Res. 22:4673. Durbin, Eddy,
+    Krogh & Mitchison (1998), Biological Sequence Analysis, Cambridge Univ. Press, Ch. 5.
+    """
+    from smartflat.engine.distances._rtwe import (
+        rtwe_alignment_path, rtwe_pairwise_distance,
+    )
+    X = np.asarray(X_symbolic).astype(int)
+    if len(X) == 1:
+        return X[0].copy()
+    n = len(X)
+    G = int(np.asarray(D_G).shape[0])
+    Dc = np.asarray(D_G, dtype=np.float64)
+
+    # 1. star center = within-group rTWE medoid.
+    Xa = X.astype(np.float64)[:, None, :]
+    D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, window=window,
+                               precomputed_distances=Dc)
+    c = int(np.argmin(D.sum(axis=1)))
+    center = X[c]
+    Lc = len(center)
+
+    # 2-3. align every member to the center; per center column, the ordered symbols each
+    # member contributes (>1 => insertion run). GAP is the sentinel -1.
+    GAP = -1
+    mapping = [[[] for _ in range(Lc)] for _ in range(n)]  # mapping[k][i] -> [symbols]
+    for k in range(n):
+        member = X[k]
+        Lm = len(member)
+        path, _ = rtwe_alignment_path(
+            center.astype(np.float64), member.astype(np.float64), Dc,
+            window=window, nu=nu, lmbda=lmbda,
+        )
+        for (i, j) in path:               # i -> center col, j -> member pos
+            if 0 <= i < Lc and 0 <= j < Lm:
+                mapping[k][i].append(int(member[j]))
+
+    # width of each center column = 1 match sub-column + its insertion sub-columns.
+    widths = [max(1, max(len(mapping[k][i]) for k in range(n))) for i in range(Lc)]
+
+    # 4-5. per (center col, sub-col): profile argmax over non-gap symbols + occupancy gate.
+    consensus, occ = [], []
+    for i in range(Lc):
+        for sub in range(widths[i]):
+            counts = np.full(G, float(pseudocount))
+            n_nongap = 0
+            for k in range(n):
+                syms = mapping[k][i]
+                sym = syms[sub] if sub < len(syms) else GAP
+                if sym != GAP:
+                    counts[sym] += 1.0
+                    n_nongap += 1
+            consensus.append(int(np.argmax(counts)))       # ties -> lowest symbol index
+            occ.append(n_nongap / n)
+    consensus = np.asarray(consensus, dtype=np.int64)
+    occ = np.asarray(occ)
+
+    keep = occ >= occupancy
+    if not keep.any():                    # never emit an empty barycenter
+        keep = np.zeros_like(occ, dtype=bool)
+        keep[int(np.argmax(occ))] = True
+    return consensus[keep].astype(np.int64)
+
+
 def barycenter_mean_rtwe_dba(X_symbolic, D_G, nu=1e-4, lmbda=0.1, max_iter=50, tol=1e-7,
                              init='random', project='round', allow_background=False,
                              random_state=None):
@@ -1173,6 +1289,35 @@ def softdtw_ssg_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
         'ssg': {
             'build': lambda X, seed: barycenter_ssg(
                 X, D_G, max_iter=ssg_max_iter, random_state=seed),
+            'distance': lambda seq, bary: dist_rtwe(
+                seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
+        },
+    }
+
+
+def msa_consensus_methods(D_G, nu=1e-4, lmbda=0.1, window=None,
+                          pseudocount=1.0, occupancy=0.5):
+    """MSA positional-consensus barycenter registry (mirrors :func:`softdtw_ssg_methods`).
+
+    A single ``{build, distance}`` entry scored by :func:`score_barycenter_quality` exactly
+    like the other methods:
+
+    - ``msa_consensus`` -- :func:`barycenter_msa_consensus` (center-star MSA, Gusfield 1993,
+      + profile per-column consensus, Durbin et al. 1998), paired with the NATIVE rTWE
+      distance (:func:`dist_rtwe`, like ``ssg``/``fgw_*``/``k_medoid``).
+
+    This is a **Family A** native-categorical method: it stays in symbol space (no ``D_G``
+    embedding, no decode), so its output is a genuine symbol sequence and the harness
+    auto-computes every axis. O(n^2 * L^2) for the pairwise medoid selection -- length-gated
+    (L=128 preview; the full-length L~5162 / full-cohort run is a scale job for pomme). Merge
+    with ``|`` alongside :func:`default_baseline_methods` / :func:`fgw_methods` /
+    :func:`softdtw_ssg_methods` in the notebook.
+    """
+    return {
+        'msa_consensus': {
+            'build': lambda X, seed: barycenter_msa_consensus(
+                X, D_G, nu=nu, lmbda=lmbda, window=window,
+                pseudocount=pseudocount, occupancy=occupancy, random_state=seed),
             'distance': lambda seq, bary: dist_rtwe(
                 seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
         },

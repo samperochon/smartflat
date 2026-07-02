@@ -29,6 +29,7 @@ a valid symbol string at every step.
 | `k_medoid` | `barycenter_k_medoid` | returns an **actual observed member** sequence (argmin of within-group pairwise rTWE) | symbol sequence (a real data point) | n/a (is a real sequence) |
 | `wasserstein` | `barycenter_wasserstein` | entropic-OT barycenter of **symbol-frequency histograms** (ground cost `D_G`) | histogram over symbols (**no order**) | n/a |
 | `transition` | `barycenter_transition_matrix` | row-normalised **bigram transition matrix** over symbols | matrix (**no sequence**) | n/a |
+| **`msa_consensus`** (F·S3) | `barycenter_msa_consensus` | **center-star MSA** (Gusfield 1993): rTWE-align every member to the medoid, merge with insertion columns ("once a gap, always a gap"); **profile per-column consensus** — Laplace-pseudocount argmax (Durbin et al. 1998) — kept only where non-gap **occupancy ≥ 50%** (match-state rule) | symbol sequence | n/a (voting **is** the discrete step) |
 
 Notes:
 - `tw_twe_mode` is the method described by the accumulator + majority-vote-under-TW-TWE design. The current
