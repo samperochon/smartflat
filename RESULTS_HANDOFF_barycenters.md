@@ -645,7 +645,7 @@ by their Spearman-with-length `r_L`:
 - **Length-driven (|r_L| ≥ 0.5) — read with caution:** `immediate_repeat_rate` / `switch_rate` (|r_L|=0.88),
   `run_length_mean` (0.88), `run_length_max` (0.53), `dwell_mean_over_states` (0.73). Their separation
   largely reflects RIL's longer administrations, not perseveration per se.
-- `lz76_complexity`, `run_length_cv`, `dwell_cv`, `bigram_coverage` separate no group.
+- `lz76_complexity`, `run_length_cv`, `dwell_cv_over_states`, `bigram_coverage` separate no group.
 
 ### 16.3 Length control — the Patient-vs-Control gain survives; HEALTHY-vs-RIL does not
 
@@ -731,9 +731,10 @@ at L=128) are **excluded here**, deferred to a shorter-L / later run. Mean over 
 | majority_voting | 0.193 | 2.45 | **44.2** | 2.55 | 9 | 43 |
 | transition | — | — | — | ~0 (is the mean) | — | — |
 
-(group-sequence entropy reference ≈ 3.7 bits. Artifacts:
-`$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/barycenter_quality_methods_L128.csv`; per-method
-chronograms `chronogram_*.png`; notebook `06g_methods_chronogram.ipynb`.)
+(group-sequence entropy reference ≈ 3.7 bits. `tw_twe_mode` and `shape_dba` are composed inline in `06g`
+via `barycenter_mode_dba` / `barycenter_soft_mode_dba`, not standalone `baselines` registry functions.
+Artifacts: `$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/barycenter_quality_methods_L128.csv`;
+per-method chronograms `chronogram_*.png`; notebook `06g_methods_chronogram.ipynb`.)
 
 - **FGW is the most frequency-faithful, least mode-collapsed structured averager**: it nearly matches the
   `wasserstein` histogram on frequency fidelity (0.038–0.043 vs 0.027) and entropy (≈ 3.5 vs group ≈ 3.7),

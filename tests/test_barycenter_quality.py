@@ -10,6 +10,10 @@ kind}`` registry. Small ``n_nodes`` / ``max_iter`` keep FGW fast under
 import numpy as np
 import pytest
 
+# FGW needs POT; skip the whole module cleanly if it is not installed rather than
+# erroring at first FGW call (POT is imported lazily inside barycenter_fgw).
+pytest.importorskip('ot')
+
 from smartflat.features.symbolic_barycenter.baselines import (
     barycenter_fgw,
     default_baseline_methods,

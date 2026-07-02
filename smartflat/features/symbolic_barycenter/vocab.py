@@ -302,7 +302,18 @@ def load_g28_cohort(rep='int_cat_segm_embedding_labels', out_dir=None, upsample_
     seqs = [np.asarray(s).astype(int) for s in df[rep]]
     if upsample_to is not None:
         from smartflat.utils.utils import upsample_sequence
-        X_symbolic = np.vstack([upsample_sequence(s, upsample_to) for s in seqs]).astype(int)
+        up = np.vstack([upsample_sequence(s, upsample_to) for s in seqs])
+        # upsample_sequence returns all-NaN rows for empty/invalid sequences; casting NaN
+        # to int is platform-dependent garbage that would silently corrupt downstream
+        # symbol indexing. Fail loudly instead.
+        if not np.isfinite(up).all():
+            bad = np.where(~np.isfinite(up).all(axis=1))[0]
+            raise ValueError(
+                f"load_g28_cohort(upsample_to={upsample_to}): {bad.size} sequence(s) "
+                f"upsampled to non-finite rows (empty/invalid input), e.g. indices "
+                f"{bad[:5].tolist()}. Filter them or use the ragged default (upsample_to=None)."
+            )
+        X_symbolic = up.astype(int)
     else:
         X_symbolic = seqs
     labels = df['pathologie'].values.astype(object)

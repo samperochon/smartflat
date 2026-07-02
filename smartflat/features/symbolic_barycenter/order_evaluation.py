@@ -16,7 +16,10 @@ sequence's symbol multiset exactly (``AUC_shuffled``). The reported
 isolates the contribution of *order alone*, because the shuffle holds frequency fixed.
 Crucially the **same pipeline** is applied to intact and shuffled data, so classifier
 optimism/overfitting bias is shared and cancels in ``delta_auc`` -- the null is its own
-control. A 95% CI on ``delta_auc`` is read off the shuffle distribution.
+control. The reported interval is a **permutation-null band** (``delta_auc`` offset by the
+percentiles of the shuffle distribution), so ``ci_low > 0`` is exactly a one-sided
+permutation test that order helps -- not a sampling CI of ``delta_auc`` (``AUC_intact``
+enters as a single point estimate, it is not itself resampled).
 
 Two shuffle nulls, both per-sequence (so the unigram histogram is exactly invariant):
 
@@ -73,11 +76,14 @@ def token_shuffle(seq, rng):
 
 
 def runlength_shuffle(seq, rng):
-    """Permute the *order of runs*, preserving the (symbol, run-length) multiset.
+    """Permute the *order of runs*, preserving the symbol multiset (dwell-time
+    distribution preserved when runs don't merge).
 
-    Run-length-encodes ``seq``, shuffles the run order, and re-concatenates. The
-    unigram histogram **and** the per-symbol run-length (dwell-time) distribution are
-    invariant; only the sequencing of runs is destroyed.
+    Run-length-encodes ``seq``, shuffles the run order, and re-concatenates. The unigram
+    histogram is **always** invariant (same tokens, reordered). The per-symbol run-length
+    (dwell-time) distribution is preserved *up to* re-concatenation merging adjacent runs
+    that happen to share a symbol -- when runs have distinct neighbours it is exactly
+    invariant. Only the sequencing of runs is destroyed.
     """
     seq = np.asarray(seq)
     symbols, lengths = _rle(seq)
@@ -145,7 +151,8 @@ def order_information(
     subsets`), scores an order-aware classifier on the intact sequences and on
     ``n_shuffles`` within-sequence shuffles (same fixed ``RepeatedStratifiedKFold`` split
     list, nested inner ``GridSearchCV``), then reports ``delta_auc = AUC_intact -
-    mean(AUC_shuffled)`` with a 95% CI from the shuffle distribution.
+    mean(AUC_shuffled)`` with a permutation-null band from the shuffle distribution (see
+    ``ci_low``/``ci_high`` under Returns).
 
     Parameters
     ----------
@@ -170,8 +177,10 @@ def order_information(
     pd.DataFrame -- one row per comparison, columns:
         comparison, feature, shuffle, classifier, n_shuffles,
         auc_intact, auc_null_mean, delta_auc, ci_low, ci_high, p_perm, order_helps.
-        ``ci_low``/``ci_high`` are the 95% CI of ``delta_auc``; ``p_perm`` is the
-        one-sided permutation p-value (order helps); ``order_helps == (ci_low > 0)``.
+        ``ci_low``/``ci_high`` are the 95% **permutation-null band** of ``delta_auc``
+        (``AUC_intact`` minus the 97.5/2.5 percentiles of the shuffle distribution) -- a
+        one-sided test, not a sampling CI; ``p_perm`` is the one-sided permutation p-value
+        (order helps); ``order_helps == (ci_low > 0)``.
     """
     from sklearn.model_selection import RepeatedStratifiedKFold
 

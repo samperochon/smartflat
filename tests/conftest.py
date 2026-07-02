@@ -1,5 +1,12 @@
 """Shared fixtures for distance module tests."""
 
+import os
+
+# Force the fork-safe numba threading layer before numba is imported anywhere
+# (rTWE / FGW hang or run very slowly under the default TBB/OpenMP layer inside
+# pytest). conftest is imported first, so this reaches numba before its first call.
+os.environ.setdefault('NUMBA_THREADING_LAYER', 'workqueue')
+
 import numpy as np
 import pytest
 
