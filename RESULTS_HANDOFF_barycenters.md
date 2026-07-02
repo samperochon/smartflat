@@ -857,3 +857,35 @@ characterised family on a frequency↔structure–vs–warp-compactness frontier
 **Pomme hand-off:** `06i` final cell documents the full-length (L≈5162) / full-cohort / full-budget
 invocation, clearly marked NOT run locally. **Deferred (later sessions):** ShapeDBA (off-label for
 categorical), profile-HMM / progressive-MSA positional consensus (S3), and the pomme scale run.
+
+### 18.4 Fairness note — how each averager treats the discrete symbol space
+
+Raised during F·S2 review: is every benchmarked averager developed with full respect to the **discrete
+(categorical)** nature of the symbolic state sequences? **No — by design there are two families**, and the
+paper should state the mechanism split explicitly (full reference, with mechanism analysis and the decode
+caveats, in **[`BARYCENTER_METHOD_DISCRETENESS.md`](BARYCENTER_METHOD_DISCRETENESS.md)**).
+
+- **Family A — native-categorical** (never leave symbol space; output positions are genuine symbols chosen by
+  voting/median/medoid): `tw_twe_mode` (`barycenter_mode_dba`, the paper method — rTWE-align + per-position
+  **hard majority vote**, re-discretised **every iteration**), `shape_dba` (soft `D_G`-vote → argmax),
+  `majority_voting`, `edit_median` (alphabet substitutions), `k_medoid` (a real member sequence), plus the
+  order-free `wasserstein` (symbol histogram) and `transition` (bigram matrix).
+- **Family B — continuous relaxation + decode** (embed symbol → its `D_G` row via `embed_symbolic_to_real`,
+  average real vectors, then snap to nearest `D_G` row via `project_real_to_symbolic` **only at the end**):
+  `dba_dtw`, `soft_dtw`, **`soft_dtw_bary`** (new), **`ssg`** (new), and `fgw_*` (decode to nearest prototype).
+
+**Three asymmetries** (Family B does *not* respect discreteness during optimisation): (1) the mean of symbol
+embeddings is generally between symbols — the "mean of category 2 and 70 → 36" pathology mode-DBA was built to
+avoid; (2) DBA-family drifts continuously and snaps **once**, whereas mode-DBA re-projects to a valid symbol
+**every** iteration; (3) the decode is **Euclidean** in `D_G`-row space, not the `D_G`/Wasserstein-optimal
+symbol. **Benchmark is still fair**: the harness scores every sequence-emitting method on the same rTWE-inertia
+yardstick (on decoded symbols) *and* reports each on its native distance — the §17 "honest tradeoff" framing.
+**No over-claim:** collapse is not unique to Family B (`tw_twe_mode` is the *most* collapsed, 13 distinct /
+3.02 bits) — the two families collapse by different mechanisms (dominant-symbol voting vs snap-of-smoothed-mean).
+
+**Current handling note (fairness):** `tw_twe_mode` is reimplemented **natively** here (vendored
+`rtwe_alignment_path`), **not** via a forked aeon — no hidden fork asymmetry vs the stock-tslearn `ssg` /
+`soft_dtw_bary`. **Deferred (fresh session, `.claude/prompts/kickoff-K-discreteness-fairness.md`):** Lever 2 =
+`D_G`-argmin decode (ground-cost-consistent snap, reported as an Euclidean-vs-`D_G` ablation); Lever 3 =
+per-iteration re-discretisation for `dba_dtw`/`ssg` (a categorical variant reported *alongside* the continuous
+ones). Both additive, ablation-reported, harness-reused, tests-first.
