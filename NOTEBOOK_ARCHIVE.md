@@ -149,7 +149,18 @@ All paths below are relative to the archived `smartflat-thesis` repository (`sma
 
 ## NB08 — Figures
 
-**Current:** `08_figures.ipynb` — Figure reproduction (stub).
+**Current:** `08_figures.ipynb` — Figure reproduction, filled and committed-with-figures.
+Ch. 4 (cohort composition, task duration) and Ch. 5 (UMAP of prototypes + empirical latents,
+full-cohort and selected chronograms, prototype-prevalence bar chart, per-participant Gram matrices)
+reproduce end-to-end from the round-8 symbolization outputs. The Chapter 6 (barycenter) section was
+demoted to a pointer to the canonical notebooks `06`/`06d`/`06e` (`RESULTS_HANDOFF_barycenters.md` §13.5).
+
+Re-run gotchas (learned Kickoff H, 2026-07-01): use the **`smartflat-conda`** kernel (not `smartflat`);
+the registration dataframe stores `video_representation_path` as absolute paths from the extraction host
+(`/diskA/...`), so embeddings are re-resolved under the current data root via `resolve_embedding_path()`;
+the UMAP fit is capped at ~80k frames (`UMAP_MAX_FRAMES`) because the full ~725k-frame fit OOM-crashes a
+laptop; and the setup cell forces `%matplotlib inline` so figures embed under headless `nbconvert`
+(`MPLBACKEND=agg` alone strips them).
 
 | Old Notebook | Description |
 |-------------|-------------|

@@ -75,7 +75,7 @@ All items below correspond to the paper's "Session 5" backlog. Sub-sessions 5a, 
 | A1 | **Unit tests for `_rtwe.py`** | ~~No tests exist~~ **DONE (5a)** | `tests/test_distances_rtwe.py` — 22 tests: symmetry, identity, triangle inequality, cost matrix shape, alignment-path correctness, pairwise, 1D/2D equivalence, edge cases, JIT smoke. Fixed bug: `rtwe_alignment_path_with_costs` used wrong index (`-2` → `-1`). |
 | A2 | **Unit tests for `_eshape_dtw.py`** | ~~No tests exist~~ **DONE (5a)** | `tests/test_distances_eshape_dtw.py` — 14 tests: symmetry, identity, cost matrix shape, step_sequ effect, pairwise, alignment path. Fixed bug: `eshape_dtw_alignment_path` used raw sequence dims instead of cost matrix dims. |
 | A3 | **Hyperparameter sweep port** | ~~Sketched in NB06~~ **DONE (5b)** | NB06 Section 1b: thesis grid `nus=[0,1e-5,1e-4] x lambdas=[0,1e-3,1e-2,1e-1]` + fine grid around final values. 500 pairs, alignment case boxplots. Saves `chapter_6_hyperparameters_searches.png`. |
-| A4 | **NB08 figure reproduction** | ~~Stub~~ ~~PARTIAL (5b)~~ **DONE (5e)** — NB08 Ch.6 section now has 5 cells: data loading, distance matrix heatmap, DBA chronograms (bg/non_bg), medoid barycenters, classification report. All figures save to `{DATA_ROOT}/figures/thesis/`. | End-to-end run producing all `chapter_6_*.png` figures |
+| A4 | **NB08 figure reproduction** | ~~Stub~~ ~~PARTIAL (5b)~~ ~~DONE (5e)~~ **DEMOTED (Kickoff H, 2026-07-01)** — NB08's Ch.6 section read pre-S2 artifacts reorganized under `g28/` and was removed; Ch.6 figures now come from `06`/`06d`/`06e` (§13.5, §4 map). NB08 now reproduces only Ch.4/5 figures. | Ch.6 producer decision pending (see §4 map note) |
 | A5 | **Baseline 1: DBA + standard DTW** (ablation) | ~~Not implemented~~ **DONE (5c)** | Pure numpy DBA with DTW alignment on D_G-row embeddings. In `baselines.py:barycenter_dba_dtw()`. |
 | A6 | **Baseline 2: Soft-DTW barycenter** | ~~Not implemented~~ **DONE (5c)** | Gradient-descent Soft-DTW on D_G-row embeddings. In `baselines.py:barycenter_soft_dtw()`. |
 | A7 | **Baseline 3: Edit-distance median string** | ~~Not implemented~~ **DONE (5c)** | Set median + iterative local search via python-Levenshtein. In `baselines.py:barycenter_edit_median()`. |
@@ -161,7 +161,7 @@ The Session 9 scientific review (score 3.06/5, major revision) identified findin
 | Finding | Code implication |
 |---------|-----------------|
 | **DBA convergence diagnostics** | ~~Add convergence curve~~ **DONE (5b)** — NB06 tracks cost vs. iteration for all 3 groups (20 iterations), saves `chapter_6_dba_convergence.png` + `convergence.csv`. |
-| **Supplementary incomplete** | ~~Baseline figures~~ **DONE (5e)** — NB06b produces `baseline_comparison_auc.png`, `baseline_chronograms.png`, `baseline_wasserstein_histograms.png`. NB08 produces `chapter_6_barycenters_median_twe.png`. |
+| **Supplementary incomplete** | ~~Baseline figures~~ **DONE (5e)** — NB06b produces `baseline_comparison_auc.png`, `baseline_chronograms.png`, `baseline_wasserstein_histograms.png`. (`chapter_6_barycenters_median_twe.png` was NB08-only and is now **superseded** — NB08 Ch.6 removed, Kickoff H; see §4 map.) |
 | **Software/code availability statement** | Draft in `COMPANION_CODE.md` section 5. Will reference this repo by name. |
 
 ### MEDIUM
@@ -177,15 +177,24 @@ The Session 9 scientific review (score 3.06/5, major revision) identified findin
 
 Figures the paper needs, and which notebook must produce them:
 
+> **Ch. 6 figure ownership changed (Kickoff H, 2026-07-01).** NB08's Chapter 6 section was demoted to a
+> pointer: its six `ch6-*` cells read pre-Session-2 artifacts (`D_twe.npy`, `barycenters.pkl`, …) that
+> Session 2 reorganized under `outputs/symbolic_barycenter/g28/`, so they no longer regenerate. The
+> canonical Ch. 6 record is now the committed-with-figures notebooks `06`/`06d`/`06e` (RESULTS_HANDOFF
+> §13.5). Consequence: `chapter_6_non_bg.png` is produced by **NB06**; the other four `chapter_6_*.png`
+> below are **superseded / not currently reproduced by any notebook** (they were pre-S2 NB08 figures).
+> **Decide per figure**: regenerate from the g28 layout in `06*`, or drop from the paper in favour of the
+> Session-2 results (§13.2) and 06b baselines.
+
 | Figure filename | Paper section | Notebook | Status |
 |----------------|---------------|----------|--------|
 | `chapter_6_hyperparameters_searches.png` | Section 3.3 | NB06 Section 1b (sweep ported in 5b) | **DONE (5b)** |
-| `chapter_6_distance_matrix_pairwise.png` | Section 5.1 | NB08 cell `ch6-distance-matrix` | REPRODUCIBLE |
-| `chapter_6_non_bg.png` | Section 5.2 | NB08 cell `ch6-barycenter-chronograms` | REPRODUCIBLE |
+| `chapter_6_distance_matrix_pairwise.png` | Section 5.1 | ~~NB08 `ch6-distance-matrix`~~ (removed, Kickoff H) | **SUPERSEDED** — no current producer (pre-S2) |
+| `chapter_6_non_bg.png` | Section 5.2 | **NB06** (saves it directly) | **DONE** |
 | `per_label_pathologie_p_values.png` | Section 5.3 | NB07 | REPRODUCIBLE |
-| `chapter_6_classification_report.png` | Section 5.4 | NB08 cell `ch6-classification-report` | REPRODUCIBLE |
-| `chapter_6_bg.png` | Supplementary Section 1 | NB08 cell `ch6-barycenter-chronograms` | REPRODUCIBLE |
-| `chapter_6_barycenters_median_twe.png` | Supplementary Section 2 | NB08 cell `ch6-medoid-barycenters` | **DONE (5e)** |
+| `chapter_6_classification_report.png` | Section 5.4 | ~~NB08 `ch6-classification-report`~~ (removed, Kickoff H) | **SUPERSEDED** — see 06b `baseline_comparison_auc.png` + §13.2 |
+| `chapter_6_bg.png` | Supplementary Section 1 | ~~NB08 `ch6-barycenter-chronograms`~~ (removed, Kickoff H) | **SUPERSEDED** — no current producer (pre-S2) |
+| `chapter_6_barycenters_median_twe.png` | Supplementary Section 2 | ~~NB08 `ch6-medoid-barycenters`~~ (removed, Kickoff H) | **SUPERSEDED** — no current producer (pre-S2) |
 | `per_label_group_p_values.png` | Supplementary Section 3 | NB07 | REPRODUCIBLE |
 | *Baseline comparison figure(s)* | Supplementary (new) | `06b_barycenter_baselines.ipynb` | **DONE (5e)** |
 

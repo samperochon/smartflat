@@ -161,7 +161,11 @@ This repo was refactored from the original `smartflat-thesis` codebase (archived
 
 ### Remaining
 
-- **NB08 — Figures** (optional): Port figure-generation notebook from the archived repo (currently a stub)
+- Refactoring stages 0–8 are complete. **NB08 — Figures** (`08_figures.ipynb`) is filled and
+  committed-with-figures: Ch. 4 (cohort/duration) + Ch. 5 (UMAP, chronograms, prototype prevalence,
+  gram matrices) reproduce end-to-end; its Chapter 6 section was demoted to a pointer to the canonical
+  barycenter notebooks `06`/`06d`/`06e` (see `RESULTS_HANDOFF_barycenters.md` §13.5). Re-run notes for
+  NB08 (kernel, per-host path remap, UMAP memory cap, inline backend) are in NB08's setup cell.
 
 ### Active Paper: Barycenter Averaging
 
