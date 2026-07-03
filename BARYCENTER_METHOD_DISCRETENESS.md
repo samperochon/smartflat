@@ -111,19 +111,43 @@ two different directions (discrete voting vs continuous-mean-then-snap).
 
 ---
 
-## Levers to tighten fairness (planned; see the kickoff)
+## Levers to tighten fairness
 
-Roughly in increasing effort. **Lever 1 is done** (this document + the §18.4 note + the 06i family column).
-Levers 2 and 3 are deferred to a fresh session — `.claude/prompts/kickoff-K-discreteness-fairness.md`.
+Roughly in increasing effort. **All three levers are done** (Lever 1: this document + the §18.4 note + the
+06i/06j `family` column; Levers 2 & 3: Kickoff K, `RESULTS_HANDOFF_barycenters.md` **§20**, notebook `06k`,
+`tests/test_barycenter_discreteness_levers.py`).
 
-1. **Document the mechanism split** (done). No code risk.
-2. **Ground-cost-consistent decode.** Replace the Euclidean `project_real_to_symbolic` with a `D_G`-argmin
-   decode for the embedding methods, so Family B's snap uses the same geometry the pipeline scores in. Report
-   as a decode-ablation (Euclidean vs `D_G`) so the change is auditable, not silent.
-3. **Per-iteration re-discretisation** for `dba_dtw` / `ssg` (snap after each update, not only at the end),
-   giving them the same "stay categorical throughout" property as mode-DBA — an apples-to-apples
-   *categorical variant* reported **alongside** the standard continuous ones (not replacing them).
+1. **Document the mechanism split** (**done**, Lever 1). No code risk.
+2. **Ground-cost-consistent decode** (**done**, Lever 2). `project_real_to_symbolic(..., decode={'euclidean','dg'})`
+   — `'dg'` snaps a mean profile `m` to `argmin_c m[c]`, the vocabulary-restricted **1-medoid under `D_G`** (the
+   geometry rTWE scores in: its substitution cost is the direct lookup `D_G[a,b]`), vs the current Euclidean
+   nearest-`D_G`-row. Exact for DBA means; a profile-argmin heuristic for the optimised soft-DTW/SSG centroids.
+   Default `'euclidean'` (unchanged); threaded through `barycenter_{dba_dtw,softdtw,ssg}` + the `*_dg` registry
+   variants. For `fgw_onehot` (D_G-agnostic feature term) `'dg'` is the barycentric projection
+   `argmin_c (D_G @ p)[c]`; `feature='mds'`+`'dg'` raises (MDS ≈ `D_G` already, so degenerate).
+3. **Per-iteration re-discretisation** (**done**, Lever 3). `barycenter_dba_dtw(discretise_each_iter=True)` +
+   `barycenter_ssg_cat` / `barycenter_softdtw_cat` (outer loop over tslearn, snap between rounds) — the
+   reference is a valid symbol string **every** iteration (like mode-DBA, but mean-then-snap). Registry `*_cat`
+   variants reported **alongside** the continuous ones.
 
-**Guardrails for 2 & 3:** additive (new variants beside the existing methods, existing keys unchanged); no
-p-hacking (report the ablation both ways, per-axis); reuse the §17 harness; tests-first; E/F/G frozen suites
-must stay green.
+**Ablation verdict (§20, G=28 / L=128 gated preview, both ways, per axis):** both levers move the DTW-family
+embed→decode methods (`dba_dtw`/`soft_dtw_bary`/`ssg`) **toward the `tw_twe_mode` corner** — more rTWE-compact
+(inertia −0.9…−2.6, the decode's design goal) but **slightly more collapsed** (entropy −0.1…−0.2, fewer
+distinct), with frequency fidelity essentially unchanged (±0.01). So a ground-cost-consistent / stay-categorical
+treatment makes Family B behave more like Family A's hard voters — it does **not** make them frequency-faithful.
+`fgw_onehot`'s barycentric `D_G` decode is a **wash** (inertia 75.8→76.2, entropy 3.55→3.57), as expected for a
+D_G-agnostic feature term. **No cherry-picked winner:** `D_G`/categorical win rTWE-inertia by construction;
+Euclidean/continuous keep marginally more diversity — the §17–§19 honest per-axis tradeoff is unchanged; the
+gain is auditability.
+
+### Lever variants (Family B, Kickoff K — additive, existing keys unchanged)
+
+| registry key | base method | lever | how discreteness is handled |
+|---|---|---|---|
+| `dba_dtw_dg` / `soft_dtw_bary_dg` / `ssg_dg` | DBA / Soft-DTW / SSG | 2 (decode) | continuous average, then **`D_G`-medoid** decode `argmin_c m[c]` (not Euclidean) at the end |
+| `fgw_onehot_dg` | FGW (one-hot) | 2 (decode) | FGW centroid → **barycentric ground-cost projection** `argmin_c (D_G @ p)[c]` |
+| `dba_dtw_cat` / `ssg_cat` / `soft_dtw_bary_cat` | DBA / SSG / Soft-DTW | 3 (categorical) | **re-discretised every iteration** (mean-then-`dg`-snap) — a valid symbol string throughout, like mode-DBA |
+
+**Guardrails (held):** additive (new variants beside the existing methods, existing keys unchanged); no
+p-hacking (ablation reported both ways, per-axis); reused the §17 harness (no harness change); tests-first;
+E/F/G frozen suites stayed green (139 passed).

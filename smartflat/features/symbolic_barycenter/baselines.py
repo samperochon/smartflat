@@ -36,7 +36,7 @@ def embed_symbolic_to_real(X_symbolic, D_G):
     return D_G[X_symbolic.astype(int)]
 
 
-def project_real_to_symbolic(X_real, D_G):
+def project_real_to_symbolic(X_real, D_G, decode='euclidean'):
     """Project real-valued embedded sequences back to symbolic via nearest prototype.
 
     Parameters
@@ -45,12 +45,33 @@ def project_real_to_symbolic(X_real, D_G):
         Real-valued embedded sequences.
     D_G : np.ndarray of shape (G, G)
         Symmetric prototype distance matrix.
+    decode : {'euclidean', 'dg'}
+        Decode rule for snapping a real profile ``m`` (a point in the ``D_G``-row
+        embedding) back to a hard symbol (Lever 2 -- discreteness fairness):
+
+        - ``'euclidean'`` (default, unchanged): nearest ``D_G`` row,
+          ``argmin_c ||m - D_G[c]||_2`` -- Euclidean in distance-profile space.
+        - ``'dg'``: ground-cost-consistent decode ``argmin_c m[c]``. For a DBA
+          arithmetic mean ``m = mean_i D_G[s_i]`` over the aligned bag ``{s_i}``,
+          ``m[c] = mean_i D_G[c, s_i]`` is the mean rTWE ground cost from candidate
+          ``c`` to the bag (``D_G`` symmetric), so ``argmin_c m[c]`` is the
+          vocabulary-restricted 1-medoid under ``D_G`` -- the same geometry the
+          harness scores in (rTWE's substitution cost is the direct lookup
+          ``D_G[a, b]``). Exact for DBA means; a profile-argmin heuristic for the
+          optimised soft-DTW/SSG centroids. Lossless round-trip for pure symbols
+          (``D_G`` diagonal is 0), provided the off-diagonal is strictly positive.
 
     Returns
     -------
     np.ndarray
         Integer-valued symbolic sequences (same shape as input minus last dim).
     """
+    if decode not in ('euclidean', 'dg'):
+        raise ValueError(f"decode must be 'euclidean' or 'dg', got {decode!r}")
+    if decode == 'dg':
+        # Ground-cost 1-medoid: argmin_c m[c]. axis=-1 covers (T, G) -> (T,)
+        # and (N, T, G) -> (N, T) uniformly.
+        return np.argmin(X_real, axis=-1)
     if X_real.ndim == 2:
         # Single sequence: (T, G)
         dists = np.linalg.norm(X_real[:, None, :] - D_G[None, :, :], axis=2)
@@ -58,6 +79,19 @@ def project_real_to_symbolic(X_real, D_G):
     # Batch: (N, T, G)
     dists = np.linalg.norm(X_real[:, :, None, :] - D_G[None, None, :, :], axis=3)
     return np.argmin(dists, axis=2)
+
+
+def _snap_and_reembed(bary_real, D_G, decode):
+    """Snap a single real barycenter ``(T, G)`` to symbols and re-embed it.
+
+    The atomic categorical step (Lever 3): decode the running real barycenter to a
+    valid symbol string via :func:`project_real_to_symbolic`, then map it back to its
+    ``D_G`` rows via :func:`embed_symbolic_to_real`. Returns ``(snapped, reembedded)``
+    with ``snapped`` an integer ``(T,)`` sequence and ``reembedded`` its ``(T, G)``
+    embedding, so callers can keep the reference categorical every iteration.
+    """
+    snapped = project_real_to_symbolic(np.asarray(bary_real), D_G, decode=decode)  # (T,)
+    return snapped, embed_symbolic_to_real(snapped[None, :], D_G)[0]               # (T,), (T, G)
 
 
 def _symbols_to_str(seq):
@@ -154,7 +188,8 @@ def _dtw_alignment(x, y):
     return path[::-1]
 
 
-def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=None):
+def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=None,
+                       discretise_each_iter=False, decode='euclidean'):
     """Baseline A5: DBA with standard DTW on prototype-distance embeddings.
 
     Pure numpy/scipy implementation (Petitjean et al. 2011).
@@ -168,9 +203,19 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=Non
     max_iters : int
         Maximum DBA iterations.
     tol : float
-        Convergence tolerance.
+        Convergence tolerance (continuous mode only).
     random_state : int or None
         Random seed for initialization.
+    discretise_each_iter : bool
+        Lever 3 (categorical variant): when True, snap the running barycenter back
+        to symbols and re-embed **after each iteration**, so the reference is a valid
+        symbol string throughout (like mode-DBA, but mean-then-snap rather than a hard
+        vote). Convergence then uses the discrete fixed-point (unchanged snapped
+        symbols) instead of the real-valued ``tol`` check, which can oscillate once
+        quantised. Default False = the standard continuous DBA (snap once at the end).
+    decode : {'euclidean', 'dg'}
+        Decode rule handed to :func:`project_real_to_symbolic` (Lever 2). Default
+        ``'euclidean'`` = unchanged.
 
     Returns
     -------
@@ -183,6 +228,7 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=Non
     rng = np.random.RandomState(random_state)
     barycenter = X_emb[rng.randint(N)].copy()  # (T, G)
     prev_cost = np.inf
+    prev_snapped = None
 
     for _ in range(max_iters):
         # Accumulate aligned values per timestep
@@ -201,11 +247,18 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=Non
             if assoc[t]:
                 barycenter[t] = np.mean(assoc[t], axis=0)
 
-        if abs(prev_cost - total_cost) < tol:
-            break
-        prev_cost = total_cost
+        if discretise_each_iter:
+            # Keep the reference categorical: snap to symbols + re-embed each iter.
+            snapped, barycenter = _snap_and_reembed(barycenter, D_G, decode)
+            if prev_snapped is not None and np.array_equal(snapped, prev_snapped):
+                break
+            prev_snapped = snapped
+        else:
+            if abs(prev_cost - total_cost) < tol:
+                break
+            prev_cost = total_cost
 
-    return project_real_to_symbolic(barycenter, D_G)
+    return project_real_to_symbolic(barycenter, D_G, decode=decode)
 
 
 def _soft_dtw_grad(barycenter, X_emb, gamma):
@@ -312,7 +365,8 @@ def barycenter_soft_dtw(X_symbolic, D_G, gamma=1.0, max_iter=30, random_state=No
     return project_real_to_symbolic(barycenter, D_G)
 
 
-def barycenter_softdtw(X_symbolic, D_G, gamma=1.0, max_iter=50, random_state=None):
+def barycenter_softdtw(X_symbolic, D_G, gamma=1.0, max_iter=50, random_state=None,
+                       decode='euclidean'):
     """Soft-DTW barycenter (Cuturi & Blondel, ICML 2017) via tslearn's L-BFGS-B solver.
 
     Library-backed counterpart to the hand-rolled :func:`barycenter_soft_dtw`: the
@@ -335,6 +389,9 @@ def barycenter_softdtw(X_symbolic, D_G, gamma=1.0, max_iter=50, random_state=Non
     random_state : int or None
         Accepted for the ``{build, distance}`` registry contract but unused: the
         L-BFGS-B barycenter is deterministic (Euclidean-mean initialisation).
+    decode : {'euclidean', 'dg'}
+        Decode rule handed to :func:`project_real_to_symbolic` (Lever 2). Default
+        ``'euclidean'`` = unchanged.
 
     Returns
     -------
@@ -349,10 +406,10 @@ def barycenter_softdtw(X_symbolic, D_G, gamma=1.0, max_iter=50, random_state=Non
         ) from exc
     X_emb = embed_symbolic_to_real(X_symbolic, D_G)  # (N, T, G)
     bary = softdtw_barycenter(X_emb, gamma=gamma, max_iter=max_iter)  # (T, G)
-    return project_real_to_symbolic(np.asarray(bary), D_G)
+    return project_real_to_symbolic(np.asarray(bary), D_G, decode=decode)
 
 
-def barycenter_ssg(X_symbolic, D_G, max_iter=30, random_state=None):
+def barycenter_ssg(X_symbolic, D_G, max_iter=30, random_state=None, decode='euclidean'):
     """Stochastic-subgradient DTW averaging (SSG; Schultz & Jain, Pattern Recognition 2018).
 
     Uses ``tslearn.barycenters.dtw_barycenter_averaging_subgradient`` on the ``D_G``
@@ -371,6 +428,9 @@ def barycenter_ssg(X_symbolic, D_G, max_iter=30, random_state=None):
         Maximum subgradient epochs.
     random_state : int or None
         Seed for the stochastic update order (determinism guarantee).
+    decode : {'euclidean', 'dg'}
+        Decode rule handed to :func:`project_real_to_symbolic` (Lever 2). Default
+        ``'euclidean'`` = unchanged.
 
     Returns
     -------
@@ -387,7 +447,120 @@ def barycenter_ssg(X_symbolic, D_G, max_iter=30, random_state=None):
     bary = dtw_barycenter_averaging_subgradient(
         X_emb, max_iter=max_iter, random_state=random_state,
     )  # (T, G)
-    return project_real_to_symbolic(np.asarray(bary), D_G)
+    return project_real_to_symbolic(np.asarray(bary), D_G, decode=decode)
+
+
+def _categorical_outer_loop(X_emb, D_G, run, n_rounds, decode):
+    """Wrap a library averager in an outer loop that re-discretises between rounds.
+
+    Lever 3 for the tslearn-backed averagers (which cannot snap mid-solve): call
+    ``run(X_emb, ref)`` with a small inner ``max_iter``, snap the result to symbols +
+    re-embed (:func:`_snap_and_reembed`), and feed that back as the init for the next
+    round -- so the reference is a valid symbol string throughout. ``ref`` is ``None``
+    on the first round (tslearn uses its default init). Early-exits at the discrete
+    fixed-point (unchanged snapped symbols). Returns the final integer ``(T,)`` sequence.
+    """
+    ref = None
+    prev = None
+    snapped = None
+    for _ in range(n_rounds):
+        bary = run(X_emb, ref)
+        snapped, ref = _snap_and_reembed(bary, D_G, decode)
+        if prev is not None and np.array_equal(snapped, prev):
+            break
+        prev = snapped
+    return snapped
+
+
+def barycenter_ssg_cat(X_symbolic, D_G, n_rounds=6, inner_max_iter=8, decode='dg',
+                       random_state=None):
+    """Categorical SSG barycenter -- Lever 3 counterpart of :func:`barycenter_ssg`.
+
+    Runs ``tslearn.barycenters.dtw_barycenter_averaging_subgradient`` inside
+    :func:`_categorical_outer_loop`, re-discretising (snap + re-embed) after each round
+    so the reference stays a valid symbol string throughout (the "stay categorical"
+    property of mode-DBA, applied to SSG). ``decode='dg'`` makes each per-round snap the
+    ground-cost 1-medoid (:func:`project_real_to_symbolic`). Reproducible under a fixed
+    ``random_state`` (fixed init each round + fixed seed).
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length).
+    D_G : np.ndarray of shape (G, G)
+        Prototype ground-cost matrix (the embedding).
+    n_rounds : int
+        Outer re-discretisation rounds.
+    inner_max_iter : int
+        Subgradient epochs per round (tslearn's ``max_iter``).
+    decode : {'euclidean', 'dg'}
+        Per-round decode rule; ``'dg'`` = ground-cost medoid (default).
+    random_state : int or None
+        Seed for the stochastic update order (determinism guarantee).
+
+    Returns
+    -------
+    np.ndarray of shape (n_timepoints,)
+        Symbolic barycenter sequence (integer-valued).
+    """
+    try:
+        from tslearn.barycenters import dtw_barycenter_averaging_subgradient
+    except ImportError as exc:  # pragma: no cover - exercised only without tslearn
+        raise ImportError(
+            "barycenter_ssg_cat requires tslearn. Install with: pip install tslearn"
+        ) from exc
+    X_emb = embed_symbolic_to_real(X_symbolic, D_G)  # (N, T, G)
+
+    def run(x_emb, ref):
+        return dtw_barycenter_averaging_subgradient(
+            x_emb, init_barycenter=ref, max_iter=inner_max_iter, random_state=random_state)
+
+    return _categorical_outer_loop(X_emb, D_G, run, n_rounds, decode)
+
+
+def barycenter_softdtw_cat(X_symbolic, D_G, gamma=1.0, n_rounds=6, inner_max_iter=8,
+                           decode='dg', random_state=None):
+    """Categorical Soft-DTW barycenter -- Lever 3 counterpart of :func:`barycenter_softdtw`.
+
+    Runs ``tslearn.barycenters.softdtw_barycenter`` inside :func:`_categorical_outer_loop`,
+    re-discretising (snap + re-embed) after each round so the reference stays a valid symbol
+    string throughout. ``decode='dg'`` makes each per-round snap the ground-cost 1-medoid.
+    Deterministic (L-BFGS-B from the re-embedded init each round).
+
+    Parameters
+    ----------
+    X_symbolic : np.ndarray of shape (n_sequences, n_timepoints)
+        Integer-valued symbolic sequences (equal length).
+    D_G : np.ndarray of shape (G, G)
+        Prototype ground-cost matrix (the embedding).
+    gamma : float
+        Soft-DTW smoothing parameter.
+    n_rounds : int
+        Outer re-discretisation rounds.
+    inner_max_iter : int
+        L-BFGS-B iterations per round (tslearn's ``max_iter``).
+    decode : {'euclidean', 'dg'}
+        Per-round decode rule; ``'dg'`` = ground-cost medoid (default).
+    random_state : int or None
+        Accepted for the ``{build, distance}`` registry contract but unused (deterministic).
+
+    Returns
+    -------
+    np.ndarray of shape (n_timepoints,)
+        Symbolic barycenter sequence (integer-valued).
+    """
+    try:
+        from tslearn.barycenters import softdtw_barycenter
+    except ImportError as exc:  # pragma: no cover - exercised only without tslearn
+        raise ImportError(
+            "barycenter_softdtw_cat requires tslearn. Install with: pip install tslearn"
+        ) from exc
+    X_emb = embed_symbolic_to_real(X_symbolic, D_G)  # (N, T, G)
+
+    def run(x_emb, ref):
+        return softdtw_barycenter(x_emb, gamma=gamma, max_iter=inner_max_iter, init=ref)
+
+    return _categorical_outer_loop(X_emb, D_G, run, n_rounds, decode)
 
 
 def barycenter_edit_median(X_symbolic, n_alphabet, max_iter=20):
@@ -1059,7 +1232,7 @@ def _classical_mds(D_G, dim=None):
 
 
 def barycenter_fgw(X_symbolic, D_G, alpha=0.5, n_nodes=128, feature='mds', mds_dim=None,
-                   max_iter=100, random_state=None):
+                   max_iter=100, random_state=None, decode='euclidean'):
     """Fused Gromov-Wasserstein (FGW) barycenter of symbolic sequences.
 
     FGW (Vayer, Chapel, Flamary, Tavenard, Courty, *ICML 2019* / *Algorithms 2020*; POT
@@ -1100,12 +1273,25 @@ def barycenter_fgw(X_symbolic, D_G, alpha=0.5, n_nodes=128, feature='mds', mds_d
         POT FGW iterations.
     random_state : int, optional
         Seed for POT's random initialisation (init-stability across seeds).
+    decode : {'euclidean', 'dg'}
+        Decode rule for the continuous FGW centroids (Lever 2 -- discreteness fairness):
+
+        - ``'euclidean'`` (default, unchanged): nearest prototype in the FGW **feature**
+          space, ``argmin_c ||Xb - proto[c]||_2`` (for one-hot this is ``argmax_c Xb[c]``).
+        - ``'dg'`` (``feature='onehot'`` only): ground-cost barycentric projection. The
+          centroid row ``Xb[t]`` is read as a soft membership over symbols -- clipped to
+          non-negative and L1-normalised to a distribution ``p`` -- and decoded to the
+          symbol minimising the **expected rTWE ground cost**, ``argmin_c sum_k p[k] D_G[c, k]``
+          (``= argmin_c (D_G @ p)[c]``, the same ``D_G`` substitution cost the harness scores
+          in). The clip+renormalise map ``Xb -> p`` is the only researcher choice; degenerate
+          all-non-positive rows fall back to the Euclidean decode. Raises for ``feature='mds'``
+          (MDS feature cost already approximates ``D_G``, so the Euclidean decode is already
+          distance-consistent -- a separate ``dg`` variant would be degenerate).
 
     Returns
     -------
     (n_nodes,) int array
-        Symbolic barycenter (continuous FGW feature centroids decoded to the nearest
-        prototype in the same feature space).
+        Symbolic barycenter (continuous FGW feature centroids decoded to a hard symbol).
     """
     import ot
 
@@ -1139,6 +1325,23 @@ def barycenter_fgw(X_symbolic, D_G, alpha=0.5, n_nodes=128, feature='mds', mds_d
         N=n_nodes, Ys=Ys, Cs=Cs, alpha=a, max_iter=max_iter, random_state=random_state,
     )
     Xb = out[0]                                            # (n_nodes, d) continuous centroids
+    if decode not in ('euclidean', 'dg'):
+        raise ValueError(f"decode must be 'euclidean' or 'dg', got {decode!r}")
+    if decode == 'dg':
+        if feature != 'onehot':
+            raise ValueError(
+                "decode='dg' for FGW is defined only for feature='onehot' "
+                "(MDS feature cost already approximates D_G)."
+            )
+        p = np.clip(Xb, 0.0, None)                         # Xb -> distribution over symbols
+        s = p.sum(axis=1, keepdims=True)
+        good = s[:, 0] > 0
+        p = np.divide(p, s, out=np.zeros_like(p), where=s > 0)
+        out_sym = (p @ np.asarray(D_G)).argmin(axis=1).astype(np.int64)  # argmin_c E_k[D_G[c, k]]
+        if not good.all():                                 # degenerate rows -> Euclidean fallback
+            eu = np.linalg.norm(Xb[:, None, :] - proto[None, :, :], axis=2).argmin(axis=1)
+            out_sym[~good] = eu[~good]
+        return out_sym
     d = np.linalg.norm(Xb[:, None, :] - proto[None, :, :], axis=2)   # (n_nodes, G)
     return d.argmin(axis=1).astype(np.int64)
 
@@ -1320,6 +1523,92 @@ def msa_consensus_methods(D_G, nu=1e-4, lmbda=0.1, window=None,
                 pseudocount=pseudocount, occupancy=occupancy, random_state=seed),
             'distance': lambda seq, bary: dist_rtwe(
                 seq, bary, D_G, nu=nu, lmbda=lmbda, window=window),
+        },
+    }
+
+
+def discreteness_lever_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
+                               dba_max_iters=30, sdtw_max_iter=50, ssg_max_iter=30,
+                               fgw_alpha=0.5, fgw_n_nodes=128, fgw_max_iter=100,
+                               cat_rounds=6, cat_inner_iter=8):
+    """Discreteness-fairness lever variants registry (Kickoff K; mirrors :func:`softdtw_ssg_methods`).
+
+    Seven ADDITIVE ``{build, distance}`` entries beside the existing Family-B methods;
+    the existing keys (``dba_dtw``/``soft_dtw_bary``/``ssg``/``fgw_onehot``) are untouched,
+    so results stay byte-for-byte reproducible. Reported ablation-style (both ways, no
+    cherry-picked winner). Each native distance mirrors the base method (``dist_rtwe`` for
+    DBA/SSG/FGW, ``dist_soft_dtw`` for the soft-DTW pair), so the harness scores every axis.
+
+    **Lever 2 -- ground-cost-consistent decode** (``decode='dg'``: ``argmin_c m[c]``, the
+    vocabulary-restricted 1-medoid under ``D_G``; snap once at the end). Same
+    ``random_state``/``n_inits`` as the Euclidean sibling -> the two share the same continuous
+    barycenter and differ *only* in the decode:
+
+    - ``dba_dtw_dg``        -- :func:`barycenter_dba_dtw` with ``decode='dg'``.
+    - ``soft_dtw_bary_dg``  -- :func:`barycenter_softdtw` with ``decode='dg'``.
+    - ``ssg_dg``            -- :func:`barycenter_ssg` with ``decode='dg'``.
+    - ``fgw_onehot_dg``     -- :func:`barycenter_fgw` (``feature='onehot'``) with ``decode='dg'``
+      (barycentric ground-cost projection; the ``feature='mds'`` case is degenerate, so it is
+      not exposed here).
+
+    **Lever 3 -- per-iteration re-discretised categorical variants** (keep the reference a valid
+    symbol string throughout, like mode-DBA but mean-then-snap; each per-iter snap is the ``'dg'``
+    ground-cost medoid):
+
+    - ``dba_dtw_cat``       -- :func:`barycenter_dba_dtw` with ``discretise_each_iter=True``.
+    - ``ssg_cat``           -- :func:`barycenter_ssg_cat` (outer loop over tslearn SSG).
+    - ``soft_dtw_bary_cat`` -- :func:`barycenter_softdtw_cat` (outer loop over tslearn Soft-DTW).
+
+    Merge with ``|`` alongside :func:`default_baseline_methods` / :func:`fgw_methods` /
+    :func:`softdtw_ssg_methods` in the notebook (length-gated; the full-length run is a pomme job).
+    """
+    def dist_rtwe_native(seq, bary):
+        return dist_rtwe(seq, bary, D_G, nu=nu, lmbda=lmbda, window=window)
+
+    def dist_sdtw_native(seq, bary):
+        return dist_soft_dtw(seq, bary, D_G, gamma=gamma)
+
+    return {
+        # --- Lever 2: ground-cost (D_G) decode, snap once at the end ---
+        'dba_dtw_dg': {
+            'build': lambda X, seed: barycenter_dba_dtw(
+                X, D_G, max_iters=dba_max_iters, random_state=seed, decode='dg'),
+            'distance': dist_rtwe_native,
+        },
+        'soft_dtw_bary_dg': {
+            'build': lambda X, seed: barycenter_softdtw(
+                X, D_G, gamma=gamma, max_iter=sdtw_max_iter, random_state=seed, decode='dg'),
+            'distance': dist_sdtw_native,
+        },
+        'ssg_dg': {
+            'build': lambda X, seed: barycenter_ssg(
+                X, D_G, max_iter=ssg_max_iter, random_state=seed, decode='dg'),
+            'distance': dist_rtwe_native,
+        },
+        'fgw_onehot_dg': {
+            'build': lambda X, seed: barycenter_fgw(
+                X, D_G, alpha=fgw_alpha, n_nodes=fgw_n_nodes, feature='onehot',
+                max_iter=fgw_max_iter, random_state=seed, decode='dg'),
+            'distance': dist_rtwe_native,
+        },
+        # --- Lever 3: per-iteration re-discretised categorical variants ---
+        'dba_dtw_cat': {
+            'build': lambda X, seed: barycenter_dba_dtw(
+                X, D_G, max_iters=dba_max_iters, random_state=seed,
+                discretise_each_iter=True, decode='dg'),
+            'distance': dist_rtwe_native,
+        },
+        'ssg_cat': {
+            'build': lambda X, seed: barycenter_ssg_cat(
+                X, D_G, n_rounds=cat_rounds, inner_max_iter=cat_inner_iter,
+                decode='dg', random_state=seed),
+            'distance': dist_rtwe_native,
+        },
+        'soft_dtw_bary_cat': {
+            'build': lambda X, seed: barycenter_softdtw_cat(
+                X, D_G, gamma=gamma, n_rounds=cat_rounds, inner_max_iter=cat_inner_iter,
+                decode='dg', random_state=seed),
+            'distance': dist_sdtw_native,
         },
     }
 

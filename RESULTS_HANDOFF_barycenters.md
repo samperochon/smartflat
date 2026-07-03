@@ -966,3 +966,106 @@ frame unchanged from §18.4: common rTWE yardstick + each method's native distan
   selection (~1600× the L=128 per-cell cost). The **optional profile-HMM decode** (`hmmlearn.CategoricalHMM`)
   + any new dependency were **explicitly deferred** — not justified for the core positional consensus.
 - `BARYCENTER_METHOD_DISCRETENESS.md` Family-A table gains the `msa_consensus` row.
+
+---
+
+## 20. Discreteness-fairness levers — ground-cost decode + categorical variants (Kickoff K, 2026-07-03)
+
+**Branch `barycenter-quality-fgw`** (session **K**, continuing F on the same branch, off F·S3's tip `5feadc3`).
+A **fairness follow-up** to F·S2: the Family-A/B split (§18.4, `BARYCENTER_METHOD_DISCRETENESS.md`) documented
+that Family B optimises in a continuous relaxation and imposes discreteness only by a final **Euclidean**
+decode. This session ships the two remaining **algorithmic** levers that make Family B's treatment of
+discreteness match the geometry the harness scores in — **additively, ablation-reported, no cherry-picked
+winner** (existing keys/defaults byte-for-byte unchanged; §17/§18/§19 reproduce; sibling suites **139 passed**,
+unchanged). Method-development + **gated preview** (G=28, L=128); the full-length (L≈5162) / full-cohort run
+is a **`pomme` hand-off** (stub in `06k`).
+
+### 20.1 Levers + API (reusable, in-package)
+
+- **Lever 2 — ground-cost-consistent decode knob.** `project_real_to_symbolic(..., decode={'euclidean','dg'})`.
+  A Family-B barycenter position is a real vector `m` in the `D_G`-row embedding. rTWE (the yardstick) uses a
+  **direct `D_G[a,b]` substitution cost**, so for a DBA mean `m = mean_i D_G[s_i]` the ground-cost-optimal
+  symbol is `argmin_c m[c] = argmin_c mean_i D_G[c,s_i]` — the **vocabulary-restricted 1-medoid under `D_G`**
+  (exact for DBA means; a profile-argmin heuristic for the optimised soft-DTW/SSG centroids). Default
+  `'euclidean'` = unchanged; lossless round-trip for pure symbols under both decodes. Threaded through
+  `barycenter_{dba_dtw,softdtw,ssg,fgw}`. For **`fgw_onehot`** (feature term is D_G-agnostic, no `D_G`-row
+  embedding) the `'dg'` decode is the **barycentric ground-cost projection** `argmin_c (D_G @ p)[c]` with
+  `p` = clip⁺+L1-normalised centroid (the only researcher DOF; stated in the docstring). `feature='mds'`+`'dg'`
+  **raises** (MDS feature cost already ≈ `D_G`, so a separate variant would be degenerate).
+- **Lever 3 — per-iteration re-discretised categorical variants.** `barycenter_dba_dtw(discretise_each_iter=True)`
+  (snap+re-embed inside the loop), and new `barycenter_ssg_cat` / `barycenter_softdtw_cat` (outer loop over
+  tslearn with a small inner `max_iter`, snapping between rounds — both accept an init array). Keeps the
+  reference a **valid symbol string every iteration** (like mode-DBA, but **mean-then-snap** rather than a hard
+  vote; precedent cited: `barycenter_mode_dba`). Each per-iter snap uses the `'dg'` ground-cost medoid. The
+  atomic step is `_snap_and_reembed`.
+- **Registry** `baselines.discreteness_lever_methods(D_G, ...)` — **7** additive `{build, distance}` entries
+  beside the existing methods: `dba_dtw_dg` / `soft_dtw_bary_dg` / `ssg_dg` / `fgw_onehot_dg` (Lever 2);
+  `dba_dtw_cat` / `ssg_cat` / `soft_dtw_bary_cat` (Lever 3). Each native distance mirrors its base method
+  (`dist_rtwe` for DBA/SSG/FGW, `dist_soft_dtw` for the soft-DTW pair) ⇒ the unchanged §17 harness scores every
+  axis. Same `random_state`/`n_inits` as the Euclidean sibling ⇒ a `*_dg` variant shares its sibling's
+  continuous barycenter and differs **only** in the decode (clean ablation).
+- Tests: `tests/test_barycenter_discreteness_levers.py` (**19**, `pytest.importorskip` for tslearn/ot):
+  decode-knob shapes/determinism/round-trip + the worked counterexample (dg→1, euclidean→0), the
+  `_snap_and_reembed` invariant, categorical-stays-symbolic (horizon sweep + embed-input spy), FGW dg + the
+  MDS `ValueError`, and harness/registry integration. `pytest tests/test_barycenter_discreteness_levers.py
+  tests/test_barycenter_softdtw_ssg.py tests/test_barycenter_msa_consensus.py tests/test_barycenter_quality.py
+  tests/test_order_evaluation.py tests/test_structure_metrics.py tests/test_baselines.py -q` → **19 + 139**
+  passed (E/F/G frozen suites unchanged).
+
+### 20.2 Ablation A — decode: Euclidean vs `D_G` (G=28, L=128, gated; both ways)
+
+Same continuous barycenter per pair (identical seeds); only the decode differs. `inertia_rtwe` ↓ = more
+compact; `freq_fidelity` ↓ = better. Anchors: `wasserstein` freq 0.027 / entropy 3.73; `tw_twe_mode` inertia
+44.79 / entropy 3.02; group-sequence entropy reference ≈ **3.78 bits**.
+
+| method | decode | inertia_rtwe ↓ | freq_fidelity ↓ | struct_pres ↓ | entropy_bits | n_distinct | n_segments |
+|---|---|---|---|---|---|---|---|
+| `dba_dtw` | euclidean | 45.65 | 0.114 | 2.73 | 3.23 | 16.0 | 60.2 |
+| `dba_dtw` | **`D_G`** | **44.77** | 0.119 | 2.65 | 3.07 | 13.8 | 59.0 |
+| `soft_dtw_bary` | euclidean | 48.72 | 0.165 | 2.93 | 3.17 | 13.7 | 26.3 |
+| `soft_dtw_bary` | **`D_G`** | **46.16** | 0.164 | 2.55 | 2.99 | 11.0 | 22.0 |
+| `ssg` | euclidean | 47.14 | 0.138 | 2.94 | 3.24 | 16.0 | 65.0 |
+| `ssg` | **`D_G`** | **45.98** | 0.147 | 2.82 | 3.03 | 13.3 | 61.7 |
+| `fgw_onehot` | euclidean | 75.79 | 0.037 | 3.28 | 3.55 | 18.0 | 111.2 |
+| `fgw_onehot` | **`D_G`** | 76.20 | 0.041 | 3.36 | 3.57 | 18.7 | 112.0 |
+
+### 20.3 Ablation B — continuous (snap@end) vs categorical (per-iteration)
+
+| method | variant | inertia_rtwe ↓ | freq_fidelity ↓ | struct_pres ↓ | entropy_bits | n_distinct | n_segments |
+|---|---|---|---|---|---|---|---|
+| `dba_dtw` | continuous | 45.65 | 0.114 | 2.73 | 3.23 | 16.0 | 60.2 |
+| `dba_dtw` | **categorical** | 45.28 | 0.122 | 2.62 | 3.09 | 14.0 | 56.3 |
+| `ssg` | continuous | 47.14 | 0.138 | 2.94 | 3.24 | 16.0 | 65.0 |
+| `ssg` | **categorical** | 45.45 | 0.145 | 2.69 | 3.05 | 13.3 | 60.0 |
+| `soft_dtw_bary` | continuous | 48.72 | 0.165 | 2.93 | 3.17 | 13.7 | 26.3 |
+| `soft_dtw_bary` | **categorical** | 46.19 | 0.166 | 2.49 | 2.98 | 11.0 | 23.3 |
+
+### 20.4 Honest per-axis reading (no cherry-picked winner)
+
+- **Both levers move the DTW-family embed→decode methods toward the `tw_twe_mode` corner** — more
+  **rTWE-compact** (its design goal: it minimises the very ground cost the yardstick measures; inertia drops
+  ≈ 0.9–2.6 across `dba_dtw`/`soft_dtw_bary`/`ssg`) at the cost of being **slightly more collapsed** (entropy
+  −0.1 to −0.2, fewer distinct symbols) with **frequency fidelity roughly unchanged** (±0.01). So treating
+  discreteness more faithfully makes Family B behave more like Family A's hard voters — it does **not** turn
+  them into frequency-faithful averagers. Neither decode/variant dominates across axes: `D_G`/categorical win
+  rTWE-inertia (by construction); Euclidean/continuous keep marginally more entropy/diversity.
+- **`fgw_onehot` is the exception — the barycentric `D_G` decode is essentially a wash** (inertia 75.8 → 76.2,
+  freq 0.037 → 0.041, entropy 3.55 → 3.57, slightly *more* distinct), exactly as expected for a method whose
+  feature term is D_G-agnostic: the ground-cost projection only reshuffles the snap at the margin. It stays the
+  anti-collapse, frequency-faithful structured average of §17.
+- **Verdict:** the fairness levers are now available and characterised, but the §17–§19 story is **unchanged** —
+  representativeness is an honest per-axis tradeoff, not a race. The value is *auditability*: Family B's decode
+  can now be made ground-cost-consistent and its optimisation kept categorical throughout, and the ablation
+  shows exactly what that costs (a shift toward compact-but-collapsed), reported both ways per axis.
+
+### 20.5 Artifacts + `pomme` hand-off
+
+- Notebook **`06k_discreteness_levers_quality.ipynb`** (committed with figures) — anchors + lever registry, the
+  full methods×quality table with the `family` column, the two ablation tables (with per-axis Δ), 3 chronograms
+  (`dba_dtw` under Euclidean / `D_G` / categorical), and the **`pomme` scale stub (not run locally)**.
+- Outputs:
+  `$DATA_ROOT/outputs/symbolic_barycenter/g28/experiments/barycenter_quality_discreteness_levers_L128.csv`
+  + `chronogram_lever_*.png`.
+- **Deferred to `pomme`** (`# --- run at scale on pomme (NOT run locally) ---` in `06k`): the full-length
+  (L≈5162, no upsample) / full-cohort / full-budget `score_barycenter_quality` run. Dominant cost is the
+  O(L²) pure-numpy `dba_dtw` build (gated to `dba_max_iters=6` in the preview).
