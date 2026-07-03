@@ -10,12 +10,7 @@ import numpy as np
 from smartflat.features.symbolic_barycenter.baselines import barycenter_mode_dba
 
 
-def _ground_cost(g=6, seed=3):
-    rng = np.random.RandomState(seed)
-    d = rng.rand(g, g)
-    d = (d + d.T) / 2
-    np.fill_diagonal(d, 0.0)
-    return np.ascontiguousarray(d)
+from _bary_helpers import _ground_cost
 
 
 def test_mode_dba_shape_valid_symbols_and_determinism():

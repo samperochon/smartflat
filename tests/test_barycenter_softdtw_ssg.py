@@ -28,22 +28,7 @@ from smartflat.features.symbolic_barycenter.barycenter_quality import (
 )
 
 
-def _ground_cost(g=6, seed=3):
-    rng = np.random.RandomState(seed)
-    d = rng.rand(g, g)
-    d = (d + d.T) / 2
-    np.fill_diagonal(d, 0.0)
-    return np.ascontiguousarray(d)
-
-
-def _cohort(g=6, l=32, seed=0):
-    """Two groups with distinct frequency profiles."""
-    rng = np.random.RandomState(seed)
-    xa = rng.choice(g, size=(5, l), p=[.4, .2, .15, .1, .1, .05])
-    xb = rng.choice(g, size=(6, l), p=[.1, .1, .15, .2, .2, .25])
-    X = np.vstack([xa, xb]).astype(int)
-    labels = np.array(['A'] * 5 + ['B'] * 6, dtype=object)
-    return X, labels
+from _bary_helpers import _cohort, _ground_cost
 
 
 # --------------------------------------------------------------------------- builders

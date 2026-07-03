@@ -44,6 +44,45 @@ _METRICS = [
     'entropy_bits', 'n_distinct', 'n_segments',
 ]
 
+# Canonical discreteness-family taxonomy for every registry key (see
+# ``BARYCENTER_METHOD_DISCRETENESS.md`` / RESULTS_HANDOFF §18.4). Single-sourced here so
+# notebooks/reports import it instead of re-copying the literal (it had been pasted into
+# 06i/06j/06k). Family A = native-categorical (never leave symbol space); Family B =
+# continuous relaxation + decode. The two ``wasserstein``/``transition`` labels carry the
+# object-kind nuance those methods have (a distribution / a matrix, no per-position symbol).
+FAMILY = {
+    # Family A -- native-categorical
+    'tw_twe_mode': 'A', 'shape_dba': 'A', 'majority_voting': 'A', 'edit_median': 'A',
+    'k_medoid': 'A', 'msa_consensus': 'A',
+    'wasserstein': 'A (freq only)', 'transition': 'A (matrix)',
+    # Family B -- continuous relaxation + decode
+    'dba_dtw': 'B', 'soft_dtw': 'B', 'soft_dtw_bary': 'B', 'ssg': 'B',
+    'fgw_mds': 'B', 'fgw_onehot': 'B',
+    # Family B lever variants (Kickoff K) -- ground-cost decode / per-iteration categorical
+    'dba_dtw_dg': 'B (D_G decode)', 'soft_dtw_bary_dg': 'B (D_G decode)',
+    'ssg_dg': 'B (D_G decode)', 'fgw_onehot_dg': 'B (D_G decode)',
+    'dba_dtw_cat': 'B->cat (per-iter)', 'ssg_cat': 'B->cat (per-iter)',
+    'soft_dtw_bary_cat': 'B->cat (per-iter)',
+}
+
+
+def family_of(method):
+    """Return the discreteness-family label ('A'/'B' variants) for a registry key.
+
+    Exact match in :data:`FAMILY` first; otherwise infer from the key suffix so the FGW
+    alpha-sweep keys (``fgw_{enc}_a{alpha}`` from :func:`build_fgw_registry`) and any
+    ``*_dg`` / ``*_cat`` lever key still resolve. Returns ``'?'`` for an unknown method.
+    """
+    if method in FAMILY:
+        return FAMILY[method]
+    if method.endswith('_cat'):
+        return 'B->cat (per-iter)'
+    if method.endswith('_dg'):
+        return 'B (D_G decode)'
+    if method.startswith('fgw_'):
+        return 'B'
+    return '?'
+
 
 def _hist_from_seq(seq, G):
     """Normalized symbol histogram (length G, sums to 1) of an integer sequence."""

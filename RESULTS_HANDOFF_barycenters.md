@@ -1069,3 +1069,33 @@ compact; `freq_fidelity` ↓ = better. Anchors: `wasserstein` freq 0.027 / entro
 - **Deferred to `pomme`** (`# --- run at scale on pomme (NOT run locally) ---` in `06k`): the full-length
   (L≈5162, no upsample) / full-cohort / full-budget `score_barycenter_quality` run. Dominant cost is the
   O(L²) pure-numpy `dba_dtw` build (gated to `dba_max_iters=6` in the preview).
+
+---
+
+## 21. Arc audit — E→F→G maintainability/accuracy/rigor/reusability/consistency (Kickoff L, 2026-07-03)
+
+**Branch `barycenter-arc-audit-L`** (off `barycenter-quality-fgw` tip `ba43e62`). A read-heavy
+expert audit of everything the E→F→G→(H/I/J/K) arc added, across five dimensions, plus a phased
+behavior-preserving refactoring plan. **Full report: [`ARC_AUDIT.md`](ARC_AUDIT.md)** (severity-ranked,
+`file:line`-cited, per-dimension verdicts). Frozen suites confirmed **209 passed** at session start.
+
+**Headline:** the arc is scientifically sound and unusually well-documented — every method is
+faithful to its cited source (`literature-grounder` 5/5 SUPPORTED: FGW↔POT/Vayer, Soft-DTW↔Cuturi,
+SSG↔Schultz-Jain, MSA↔Gusfield/Durbin, rTWE↔Marteau TWE), the statistics are leakage-guarded and
+honestly reported, and the registry/harness is genuinely reusable. **No P0 survived verification.**
+The real debt is structural/consistency: **(P1)** `baselines.py` = 2109 lines doing ≥6 jobs, and
+**(P1)** the `nu`/`lmbda` default drifted into **four** operating points (`0.001/1.0` vs `1e-4/0.1`
+vs the eshape inner `0.001/0.01` vs the doc's `1e-5/0.1`) — committed numbers are safe (notebooks
+pin `1e-4/0.1`) but the mismatched defaults are a latent trap.
+
+**Phase 0 landed this session (behavior-preserving):** extracted the copy-pasted `_ground_cost`/
+`_cohort`/`_seq` test helpers to `tests/_bary_helpers.py` (7 files); canonical
+`barycenter_quality.FAMILY`/`family_of()` + `tests/test_family_taxonomy.py` (de-duplicates the
+06i/06j/06k literal for future notebooks); `visualization.py` stale-TODO + misplaced-import
+cleanup; `PAPER_BRIDGE.md` Tier-D reconciliation (the §17–§20 quality roster is *additive
+representativeness*, not `tab:baselines` discrimination); this §21 + `ARC_AUDIT.md`. **Deferred to
+phased sub-sessions** (`.claude/plans/kickoff-l-squishy-meadow.md`): Phase 1 `nu`/`lmbda`
+unification behind `RTWE_NU`/`RTWE_LMBDA` constants gated by a `quality_table` CSV **oracle no-op
+proof**; Phase 2 `baselines.py` split (distances/builders/registries + back-compat re-exports);
+Phase 3 reusability polish (`__init__` re-exports, `rtwe_alignment_path` arg-order footgun); Phase 4
+rigor caveats (fold-level-bootstrap anti-conservatism, length-standardization notes).

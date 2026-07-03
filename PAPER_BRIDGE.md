@@ -71,7 +71,10 @@ Reframes the F contribution from group *discrimination* (settled by E/G) to **re
 - **F·S3 (§19)** — MSA positional-consensus (`barycenter_msa_consensus`, `msa_consensus_methods`): center-star MSA + profile per-column consensus — the principled Family-A alternative to `majority_voting`/`tw_twe_mode`.
 - **K (§20)** — discreteness-fairness Levers 2 & 3 (`discreteness_lever_methods`, `barycenter_{ssg,softdtw}_cat`, `project_real_to_symbolic(decode=)`): ground-cost (`D_G`) decode + per-iteration categorical variants, reported as decode / continuous-vs-categorical ablations. Verdict: both move Family B toward the compact-but-collapsed `tw_twe_mode` corner — auditability, not a new winner.
 
-**Implication for the paper:** the barycenter is a *principled, ablation-justified averager* whose structure↔frequency and discreteness knobs are characterised — not a frequency-beater. Full records: `RESULTS_HANDOFF_barycenters.md` §17–§20; fairness reference `BARYCENTER_METHOD_DISCRETENESS.md`. **Not yet folded into the Tier-A/B baseline tables below** (those track the original 6-baseline spec) — the F-arc methods are an additional, quality-axis roster; reconciling the two is a documentation task for the arc audit (Kickoff L).
+**Implication for the paper:** the barycenter is a *principled, ablation-justified averager* whose structure↔frequency and discreteness knobs are characterised — not a frequency-beater. Full records: `RESULTS_HANDOFF_barycenters.md` §17–§20; fairness reference `BARYCENTER_METHOD_DISCRETENESS.md`. **Not folded into the Tier-A/B baseline tables below** (those track the original 6-baseline
+*discrimination* spec) — the F-arc methods are an additive, orthogonal **quality-axis roster**
+(representation fidelity, not `tab:baselines` AUC). Reconciled by the arc audit (Kickoff L): see
+**Tier D** at the end of §1.
 
 ---
 
@@ -107,6 +110,27 @@ All items below correspond to the paper's "Session 5" backlog. Sub-sessions 5a, 
 | C2 | ~~Copy comparison figures~~ **DONE (5e)** — figures saved to `{DATA_ROOT}/outputs/symbolic_barycenter/` and `{DATA_ROOT}/figures/thesis/` (not copied to paper repo per constraint) |
 
 ---
+
+### Tier D -- Representation-quality roster (Kickoff F arc; **additive, not `tab:baselines`**)
+
+Reconciliation note (arc audit, Kickoff L). The §17–§20 methods answer a **different question**
+than the six baselines above: not *which averager discriminates groups* (settled — symbol
+frequency dominates; E's §15 = 0/15 order signals) but *which averager is the best group
+**representative*** (representation fidelity on a common rTWE yardstick + each method's native
+distance). They are **additive to, not a replacement for**, the Tier-A/B discrimination
+baselines and must not be pasted into `tab:baselines`.
+
+| Method (registry key) | Family | Added | Record |
+|---|---|---|---|
+| `fgw_mds` / `fgw_onehot` | B (embed→decode) | F·S1 | §17 (FGW α-decomposition) |
+| `soft_dtw_bary` / `ssg` | B | F·S2 | §18 (tslearn-backed) |
+| `msa_consensus` | A (native-categorical) | F·S3 | §19 (center-star MSA) |
+| `dba_dtw_dg` / `ssg_dg` / `soft_dtw_bary_dg` / `fgw_onehot_dg` / `*_cat` | B (lever variants) | K | §20 (discreteness levers) |
+
+Full mechanism split (Family A vs B, the three asymmetries, the decode caveats) lives in
+[`BARYCENTER_METHOD_DISCRETENESS.md`](BARYCENTER_METHOD_DISCRETENESS.md); the canonical
+Family-A/B map is `barycenter_quality.FAMILY` / `family_of()`. Full audit:
+[`ARC_AUDIT.md`](ARC_AUDIT.md).
 
 ## 2. Baseline specifications
 

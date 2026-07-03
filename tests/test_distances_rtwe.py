@@ -17,9 +17,7 @@ from smartflat.engine.distances import (
 )
 
 
-def _seq(rng, length, n_symbols=5):
-    """Create a (1, length) int64 symbolic sequence."""
-    return rng.randint(0, n_symbols, size=(1, length)).astype(np.int64)
+from _bary_helpers import _seq
 
 
 # ---------------------------------------------------------------------------

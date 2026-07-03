@@ -30,6 +30,7 @@ except ImportError:
 from smartflat.engine.distances._eshape_dtw import eshape_dtw_alignment_path
 from smartflat.engine.distances._rtwe import rtwe_alignment_path
 from smartflat.utils.utils_coding import blue, green, red
+from smartflat.utils.utils_visualization import get_base_colors, get_cmap
 
 
 def _get_segments(labels):
@@ -41,7 +42,6 @@ def _get_segments(labels):
     end_idxs = _np.r_[change, len(labels)]
     values = labels[start_idxs]
     return list(zip(start_idxs, end_idxs, values))
-from smartflat.utils.utils_visualization import get_base_colors, get_cmap
 
 
 def plot_pairwise_twe_distances_by_group(D, df, covar_col):
@@ -798,7 +798,6 @@ def plot_signals(x, y, title='Dyad Chronograms', cmap=None, t_max=3000):
     cbar1 = plt.colorbar(im1, ax=axs[1], orientation='vertical', fraction=0.04, pad=0.02)
     cbar1.set_label('Label', fontsize=12)
 
-    # TODO: `info` was a notebook global — needs to be parameterized or removed
     plt.suptitle("Chronograms for Sampled Subjects", fontsize=16, fontweight='bold')
     plt.show()
 
