@@ -62,6 +62,17 @@ Tests a hypothesis **orthogonal** to E's global-order null: *local* execution st
 - **Honest caveat:** sequence **length is group-correlated** (RIL longer) and perseveration/run-length/dwell metrics scale with L — their raw group separation is largely duration. **HEALTHY-vs-RIL structure gain is a length effect** (vanishes after control); **RIL-vs-TBI null**. Read metric-level claims against the `spearman_length` column.
 - **Implication for the paper:** a *new, honestly-qualified positive axis* — local execution structure discriminates Patient-vs-Control where global order does not — distinct from `tab:baselines` (barycenter discrimination) and not a frequency-beater there. Full record: `RESULTS_HANDOFF_barycenters.md` §16. Coordination status (E+G landed; F next, pinned imports): `.claude/plans/coordination-EFG-roadmap.md` §9.
 
+### 🔄 UPDATE (2026-07-02/03) — Kickoff F arc: barycenter-quality methods comparison + discreteness levers (notebooks `06g`/`06i`/`06j`/`06k`; modules `symbolic_barycenter/barycenter_quality.py`, additions to `baselines.py`)
+
+Reframes the F contribution from group *discrimination* (settled by E/G) to **representation fidelity**: which averaging method is the best group *representative*. A method-agnostic **quality harness** (`barycenter_quality.{score_barycenter_quality, quality_table, build_fgw_registry}`) scores any `{build, distance, kind}` registry method on one common yardstick (rTWE within-group inertia on decoded symbols) **plus** each method's native distance — the "honest per-axis tradeoff, not a single winner" framing. Four sub-sessions, each additive + gated-preview (G=28, L=128) with the full-length L≈5162 run deferred to `pomme`:
+
+- **F·S1 (§17)** — FGW barycenter (`barycenter_fgw`, `fgw_methods`): α knob = frequency↔structure decomposition (α→0 ≈ the winning `wasserstein` histogram; α=1 degrades). FGW is the most frequency-faithful / anti-collapse structured average; mode-DBA is the most rTWE-compact.
+- **F·S2 (§18)** — library-backed Soft-DTW + SSG (`barycenter_softdtw`, `barycenter_ssg`, `softdtw_ssg_methods`, tslearn) + the **fairness note** (§18.4): the averagers split into Family A (native-categorical) vs Family B (embed→decode). Full mechanism analysis in `BARYCENTER_METHOD_DISCRETENESS.md`.
+- **F·S3 (§19)** — MSA positional-consensus (`barycenter_msa_consensus`, `msa_consensus_methods`): center-star MSA + profile per-column consensus — the principled Family-A alternative to `majority_voting`/`tw_twe_mode`.
+- **K (§20)** — discreteness-fairness Levers 2 & 3 (`discreteness_lever_methods`, `barycenter_{ssg,softdtw}_cat`, `project_real_to_symbolic(decode=)`): ground-cost (`D_G`) decode + per-iteration categorical variants, reported as decode / continuous-vs-categorical ablations. Verdict: both move Family B toward the compact-but-collapsed `tw_twe_mode` corner — auditability, not a new winner.
+
+**Implication for the paper:** the barycenter is a *principled, ablation-justified averager* whose structure↔frequency and discreteness knobs are characterised — not a frequency-beater. Full records: `RESULTS_HANDOFF_barycenters.md` §17–§20; fairness reference `BARYCENTER_METHOD_DISCRETENESS.md`. **Not yet folded into the Tier-A/B baseline tables below** (those track the original 6-baseline spec) — the F-arc methods are an additional, quality-axis roster; reconciling the two is a documentation task for the arc audit (Kickoff L).
+
 ---
 
 ## 1. What the paper needs from this repo
