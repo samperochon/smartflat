@@ -257,7 +257,12 @@ Figures the paper needs, and which notebook must produce them:
 - **Sequence length:** Interpolated to median L=5,182 symbols (~27.4 min)
 - **Distance:** TW-TWE (Temporal-Wasserstein Time Warp Edit) -- rTWE with outer Edit-Shape DTW
 - **Barycenter:** DBA with mode-based update (mode replaces mean for categorical data)
-- **Hyperparameters:** nu=1e-5, lambda=0.1, delta=0.3 (from grid search)
+- **Hyperparameters:** nu=1e-5, lambda=0.1, delta=0.3 (thesis grid-search values).
+  **Note (Kickoff M):** the *shipped* barycenter code operates at the canonical point
+  **nu=1e-4, lambda=0.1** — the §17–§20 quality yardstick and every F-arc registry, now unified
+  behind `baselines.RTWE_NU` / `RTWE_LMBDA` (see `ARC_AUDIT.md` Dimension 5 / §22 of
+  `RESULTS_HANDOFF_barycenters.md`). The `1e-5` above is retained as the historical thesis
+  grid value; the two operating points genuinely differ and are **not** reconciled in code.
 - **Evaluation:** 10 random 50/50 train-test splits, 3 initializations per split, AUC-ROC with p_match feature
 - **Key result:** AUC 0.77 (Patient vs Control), 0.84 (RIL vs Control), 0.59 (TBI vs RIL)
 

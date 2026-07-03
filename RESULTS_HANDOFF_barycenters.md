@@ -1099,3 +1099,46 @@ unification behind `RTWE_NU`/`RTWE_LMBDA` constants gated by a `quality_table` C
 proof**; Phase 2 `baselines.py` split (distances/builders/registries + back-compat re-exports);
 Phase 3 reusability polish (`__init__` re-exports, `rtwe_alignment_path` arg-order footgun); Phase 4
 rigor caveats (fold-level-bootstrap anti-conservatism, length-standardization notes).
+
+---
+
+## 22. rTWE `nu`/`lmbda` unification behind module constants (Kickoff M, 2026-07-03)
+
+**Branch `barycenter-nu-lmbda-unify`** (off the arc-audit tip `24c531a`; executes `ARC_AUDIT.md` **Phase 1**).
+A pure **internal-consistency, behaviour-preserving** session — no new method, no new result. The arc's rTWE
+cost default had drifted into four operating points (`ARC_AUDIT.md` Dimension 5); this collapses the
+**smartflat layer** to one canonical point behind module constants, gated by a numeric no-op proof so every
+committed §17–§20 number stays byte-for-byte reproducible.
+
+- **Constants + single source of truth.** `baselines.RTWE_NU = 1e-4`, `baselines.RTWE_LMBDA = 0.1` are now
+  the default for **all 16** smartflat-layer functions/registries carrying a `nu`/`lmbda` default —
+  `dist_rtwe`, `pmatch_to_barycenter`, `dist_neg_pmatch`, `barycenter_mode_dba`, `default_baseline_methods`
+  (the **five** that had drifted to `0.001/1.0`), plus the six `*_methods` registry builders,
+  `barycenter_msa_consensus`/`barycenter_mean_rtwe_dba`/`barycenter_soft_mode_dba`, the `*_stock_twe` pair,
+  and `dist_eshape_dtw` (already `1e-4/0.1`, now referencing the constant) — and `barycenter_quality`'s
+  common yardstick (`score_barycenter_quality`, `build_fgw_registry`, imported from `baselines`).
+- **Vendored kernel untouched.** `engine/distances/_rtwe.py`'s aeon-style defaults (`0.001/1.0`) stay —
+  smartflat callers always pass explicit values. The eshape inner-cost hardcode (`0.001/0.01`) is named
+  `_ESHAPE_INNER_RTWE_NU/LMBDA` and documented as a fixed, near-inert, deliberately-decoupled inner cost
+  (**byte-identical**, not threaded — threading would move `test_distances_eshape_dtw`).
+- **Naming.** `barycenter_dba_dtw(max_iters=…)` → `max_iter=` with a deprecation-warning back-compat
+  `max_iters` alias; the 2 internal + test callers migrated. (`barycenter_soft_dtw` `decode=` parity
+  deferred to Phase 3.) `PAPER_BRIDGE.md` §6 footnoted: thesis grid `1e-5/0.1` vs shipped `1e-4/0.1`
+  (genuinely different; not reconciled in code).
+- **Oracle no-op proof (the gate).** On the clean checkout vs post-edit, the **L=128 merged 5-registry**
+  (`default + fgw + softdtw_ssg + msa + discreteness`, 18 methods, all built with explicit `1e-4/0.1`)
+  `quality_table` and a gated `evaluate_baselines` were frozen to CSV. **Both byte-identical before/after**
+  (md5 unchanged: quality_table `6b79866…`, evaluate `05c511c…`; empty `diff`). The gated override even
+  exercised the `max_iters=` alias, still byte-identical. **No migration surfaced** — the repo-wide
+  call-site audit found zero caller relying on the old default for a `nu`/`lmbda`-sensitive value (every
+  default-reliant site asserts invariants — self-distance/symmetry/non-negativity/key-membership — or uses
+  `majority_voting`, which is `nu`/`lmbda`-independent). The committed §17–§20 numbers are preserved exactly.
+- **Guard test.** `tests/test_rtwe_hparam_consistency.py` (21 cases): `inspect.signature` over all 16
+  functions asserts each `nu`/`lmbda` default `== RTWE_NU/RTWE_LMBDA` (none is `0.001`/`1.0`); bare
+  `dist_rtwe` `==` explicit-canonical `==` pinned `tests/_oracles/rtwe_hparam_oracle.csv`; `max_iter` alias
+  equivalence + `DeprecationWarning`. Frozen suite (11 prior files + the guard) → **234 passed, 13 warnings**
+  (was 213; +21 guard cases, and the warning count is unchanged — no stray deprecation warnings leaked from
+  the alias). `ARC_AUDIT.md` Phase 1 marked DONE.
+
+**Public API (recall):** `from smartflat.features.symbolic_barycenter.baselines import RTWE_NU, RTWE_LMBDA`.
+Everything else is unchanged — no registry-key or public-signature change beyond the `max_iters` alias.

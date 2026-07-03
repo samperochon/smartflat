@@ -125,12 +125,12 @@ def test_snap_and_reembed_invariant():
 
 # --------------------------------------------------------------------------- Lever 3: dba_dtw_cat
 
-@pytest.mark.parametrize('max_iters', [1, 2, 3])
-def test_dba_dtw_cat_valid_symbols_every_horizon(max_iters):
+@pytest.mark.parametrize('max_iter', [1, 2, 3])
+def test_dba_dtw_cat_valid_symbols_every_horizon(max_iter):
     """At every iteration budget the categorical DBA returns a valid symbol string."""
     d_g = _ground_cost(6)
     X = np.random.RandomState(6).randint(0, 6, size=(5, 24)).astype(np.int64)
-    b = barycenter_dba_dtw(X, d_g, max_iters=max_iters, random_state=0,
+    b = barycenter_dba_dtw(X, d_g, max_iter=max_iter, random_state=0,
                            discretise_each_iter=True, decode='dg')
     assert b.ndim == 1 and b.shape == (24,)
     assert np.issubdtype(b.dtype, np.integer)
@@ -152,7 +152,7 @@ def test_dba_dtw_cat_reference_is_integer_every_iteration(monkeypatch):
         return orig(x_symbolic, dg)
 
     monkeypatch.setattr(B, 'embed_symbolic_to_real', spy)
-    b = barycenter_dba_dtw(X, d_g, max_iters=3, random_state=0,
+    b = barycenter_dba_dtw(X, d_g, max_iter=3, random_state=0,
                            discretise_each_iter=True, decode='dg')
     assert calls['n'] >= 2                                  # initial embed + >=1 per-iter re-embed
     assert set(np.unique(b)).issubset(set(range(6)))
@@ -162,8 +162,8 @@ def test_dba_dtw_default_unchanged():
     """discretise_each_iter=False + no decode arg == the explicit continuous/Euclidean call."""
     d_g = _ground_cost(6)
     X = np.random.RandomState(8).randint(0, 6, size=(5, 24)).astype(np.int64)
-    a = barycenter_dba_dtw(X, d_g, max_iters=5, random_state=0)
-    b = barycenter_dba_dtw(X, d_g, max_iters=5, random_state=0,
+    a = barycenter_dba_dtw(X, d_g, max_iter=5, random_state=0)
+    b = barycenter_dba_dtw(X, d_g, max_iter=5, random_state=0,
                            discretise_each_iter=False, decode='euclidean')
     np.testing.assert_array_equal(a, b)
 

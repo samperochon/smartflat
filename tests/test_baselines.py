@@ -95,15 +95,15 @@ class TestEmbedding:
 
 class TestDBADTW:
     def test_output_shape(self, X_sym, D5):
-        bary = barycenter_dba_dtw(X_sym, D5, max_iters=3, random_state=42)
+        bary = barycenter_dba_dtw(X_sym, D5, max_iter=3, random_state=42)
         assert bary.shape == (20,)
 
     def test_symbols_in_vocabulary(self, X_sym, D5):
-        bary = barycenter_dba_dtw(X_sym, D5, max_iters=3, random_state=42)
+        bary = barycenter_dba_dtw(X_sym, D5, max_iter=3, random_state=42)
         assert all(0 <= s < D5.shape[0] for s in bary)
 
     def test_no_nan(self, X_sym, D5):
-        bary = barycenter_dba_dtw(X_sym, D5, max_iters=3, random_state=42)
+        bary = barycenter_dba_dtw(X_sym, D5, max_iter=3, random_state=42)
         assert not np.any(np.isnan(bary))
 
 

@@ -14,6 +14,17 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 
 # ---------------------------------------------------------------------------
+# Canonical rTWE operating point (smartflat layer)
+# ---------------------------------------------------------------------------
+# Every smartflat-layer barycenter/distance/registry default references these so
+# "the rTWE cost" has ONE operating point. The vendored engine/distances/_rtwe.py
+# kernel keeps its own aeon-style defaults; smartflat callers always pass these
+# explicitly. Unified in Kickoff M (arc-audit Phase 1); see ARC_AUDIT.md Dimension 5.
+RTWE_NU = 1e-4      # rTWE stiffness    (was drifting: 0.001 vs 1e-4)
+RTWE_LMBDA = 0.1    # rTWE edit penalty (was drifting: 1.0   vs 0.1)
+
+
+# ---------------------------------------------------------------------------
 # Embedding utilities
 # ---------------------------------------------------------------------------
 
@@ -188,8 +199,8 @@ def _dtw_alignment(x, y):
     return path[::-1]
 
 
-def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=None,
-                       discretise_each_iter=False, decode='euclidean'):
+def barycenter_dba_dtw(X_symbolic, D_G, max_iter=30, tol=1e-5, random_state=None,
+                       discretise_each_iter=False, decode='euclidean', max_iters=None):
     """Baseline A5: DBA with standard DTW on prototype-distance embeddings.
 
     Pure numpy/scipy implementation (Petitjean et al. 2011).
@@ -200,8 +211,11 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=Non
         Integer-valued symbolic sequences.
     D_G : np.ndarray of shape (G, G)
         Prototype distance matrix.
-    max_iters : int
+    max_iter : int
         Maximum DBA iterations.
+    max_iters : int or None
+        Deprecated alias for ``max_iter`` (emits ``DeprecationWarning`` if set);
+        kept for back-compat with pre-Kickoff-M callers.
     tol : float
         Convergence tolerance (continuous mode only).
     random_state : int or None
@@ -222,6 +236,14 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=Non
     np.ndarray of shape (n_timepoints,)
         Symbolic barycenter sequence (integer-valued).
     """
+    if max_iters is not None:  # deprecated alias for max_iter (Kickoff M rename)
+        import warnings
+        warnings.warn(
+            "barycenter_dba_dtw(max_iters=...) is deprecated; use max_iter=...",
+            DeprecationWarning, stacklevel=2,
+        )
+        max_iter = max_iters
+
     X_emb = embed_symbolic_to_real(X_symbolic, D_G)  # (N, T, G)
     N, T, G = X_emb.shape
 
@@ -230,7 +252,7 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iters=30, tol=1e-5, random_state=Non
     prev_cost = np.inf
     prev_snapped = None
 
-    for _ in range(max_iters):
+    for _ in range(max_iter):
         # Accumulate aligned values per timestep
         assoc = [[] for _ in range(T)]
         total_cost = 0.0
@@ -713,7 +735,7 @@ def barycenter_majority_voting(X_symbolic):
     return result
 
 
-def barycenter_mode_dba(X_symbolic, D_G, nu=0.001, lmbda=1.0, max_iter=10, random_state=None):
+def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=10, random_state=None):
     """Mode-based DBA barycenter for categorical symbolic sequences.
 
     Mean-based DBA averages nominal prototype indices (e.g. symbols 2 and 70 -> 36),
@@ -771,7 +793,7 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=0.001, lmbda=1.0, max_iter=10, rando
     return ref
 
 
-def barycenter_msa_consensus(X_symbolic, D_G, nu=1e-4, lmbda=0.1, window=None,
+def barycenter_msa_consensus(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,
                              pseudocount=1.0, occupancy=0.5, random_state=None):
     """Center-star MSA + profile positional consensus (Family A, native-categorical).
 
@@ -887,7 +909,7 @@ def barycenter_msa_consensus(X_symbolic, D_G, nu=1e-4, lmbda=0.1, window=None,
     return consensus[keep].astype(np.int64)
 
 
-def barycenter_mean_rtwe_dba(X_symbolic, D_G, nu=1e-4, lmbda=0.1, max_iter=50, tol=1e-7,
+def barycenter_mean_rtwe_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=50, tol=1e-7,
                              init='random', project='round', allow_background=False,
                              random_state=None):
     """Mean-based (Petitjean) DBA with rTWE alignment -- faithful thesis reconstruction.
@@ -1039,7 +1061,7 @@ def dist_wasserstein_hist(seq, bary_hist, M):
     return float(ot.emd2(h, np.asarray(bary_hist, dtype=float), M))
 
 
-def dist_rtwe(seq, bary, D_cost, nu=0.001, lmbda=1.0, window=None):
+def dist_rtwe(seq, bary, D_cost, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
     """TW-TWE (registered Time Warp Edit) distance with a given ground cost.
 
     Used as the native distance for the proposed method (``D_cost = D_G``),
@@ -1054,7 +1076,7 @@ def dist_rtwe(seq, bary, D_cost, nu=0.001, lmbda=1.0, window=None):
     ))
 
 
-def pmatch_to_barycenter(seq, bary, D_G, nu=0.001, lmbda=1.0, window=None):
+def pmatch_to_barycenter(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
     """Proportion of exactly-matching symbols along the rTWE alignment between a sequence
     and a barycenter. This is the paper's discriminative feature; higher means closer."""
     from smartflat.engine.distances._rtwe import rtwe_alignment_path
@@ -1075,12 +1097,12 @@ def pmatch_to_barycenter(seq, bary, D_G, nu=0.001, lmbda=1.0, window=None):
     return nmatch / max(ntot, 1)
 
 
-def dist_neg_pmatch(seq, bary, D_G, nu=0.001, lmbda=1.0, window=None):
+def dist_neg_pmatch(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
     """Negative p_match, usable as a 'distance' in :func:`evaluate_baselines` (lower=closer)."""
     return -pmatch_to_barycenter(seq, bary, D_G, nu=nu, lmbda=lmbda, window=window)
 
 
-def pmatch_to_barycenter_stock_twe(seq, bary, nu=1e-4, lmbda=0.1):
+def pmatch_to_barycenter_stock_twe(seq, bary, nu=RTWE_NU, lmbda=RTWE_LMBDA):
     """Thesis ``Match_normalized`` feature: fraction of diagonal 'Match' steps along the
     STOCK aeon TWE alignment (Euclidean inner cost, no D_G) where the (rounded) barycenter
     symbol equals the sequence symbol.
@@ -1106,7 +1128,7 @@ def pmatch_to_barycenter_stock_twe(seq, bary, nu=1e-4, lmbda=0.1):
     return nmatch / max(ntot, 1)
 
 
-def dist_neg_pmatch_stock(seq, bary, nu=1e-4, lmbda=0.1):
+def dist_neg_pmatch_stock(seq, bary, nu=RTWE_NU, lmbda=RTWE_LMBDA):
     """Negative stock-TWE Match_normalized, usable as a 'distance' (lower=closer)."""
     return -pmatch_to_barycenter_stock_twe(seq, bary, nu=nu, lmbda=lmbda)
 
@@ -1148,7 +1170,7 @@ def dist_transition(seq, bary_T):
     return float(np.linalg.norm(_transition_matrix(seq, G) - np.asarray(bary_T)))
 
 
-def dist_eshape_dtw(seq, bary, D_cost, nu=1e-4, lmbda=0.1, window=None, step_sequ=2):
+def dist_eshape_dtw(seq, bary, D_cost, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None, step_sequ=2):
     """Edit-Shape DTW outer-loop distance (rTWE inner cost) between a sequence and barycenter.
 
     Uses the temporal-shape structure of the outer DTW alignment over the rTWE inner cost.
@@ -1164,7 +1186,7 @@ def dist_eshape_dtw(seq, bary, D_cost, nu=1e-4, lmbda=0.1, window=None, step_seq
     ))
 
 
-def barycenter_soft_mode_dba(X_symbolic, D_G, nu=1e-4, lmbda=0.1, beta=4.0, max_iter=10,
+def barycenter_soft_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, beta=4.0, max_iter=10,
                              random_state=None):
     """Soft categorical DBA: per-position soft voting in the D_G geometry.
 
@@ -1346,7 +1368,7 @@ def barycenter_fgw(X_symbolic, D_G, alpha=0.5, n_nodes=128, feature='mds', mds_d
     return d.argmin(axis=1).astype(np.int64)
 
 
-def default_baseline_methods(D_G, gamma=1.0, nu=0.001, lmbda=1.0, window=None):
+def default_baseline_methods(D_G, gamma=1.0, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
     """Build the six standard-baseline registry for :func:`evaluate_baselines`.
 
     Each baseline is paired with its NATIVE classification distance so the
@@ -1401,7 +1423,7 @@ def default_baseline_methods(D_G, gamma=1.0, nu=0.001, lmbda=1.0, window=None):
     }
 
 
-def extra_experiment_methods(D_G, G, nu=1e-4, lmbda=0.1, window=None, step_sequ=2):
+def extra_experiment_methods(D_G, G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None, step_sequ=2):
     """Registry of the beat-majority-voting experimental methods.
 
     Kept separate from :func:`default_baseline_methods` so the six-baseline contract
@@ -1437,7 +1459,7 @@ def extra_experiment_methods(D_G, G, nu=1e-4, lmbda=0.1, window=None, step_sequ=
     }
 
 
-def fgw_methods(D_G, n_nodes=128, alpha=0.5, nu=1e-4, lmbda=0.1, window=None, mds_dim=None,
+def fgw_methods(D_G, n_nodes=128, alpha=0.5, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None, mds_dim=None,
                 max_iter=100):
     """Fused Gromov-Wasserstein barycenter registry (the representation-quality centrepiece).
 
@@ -1466,7 +1488,7 @@ def fgw_methods(D_G, n_nodes=128, alpha=0.5, nu=1e-4, lmbda=0.1, window=None, md
     }
 
 
-def softdtw_ssg_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
+def softdtw_ssg_methods(D_G, gamma=1.0, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,
                         sdtw_max_iter=50, ssg_max_iter=30):
     """Library-backed Soft-DTW + SSG barycenter registry (mirrors :func:`fgw_methods`).
 
@@ -1498,7 +1520,7 @@ def softdtw_ssg_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
     }
 
 
-def msa_consensus_methods(D_G, nu=1e-4, lmbda=0.1, window=None,
+def msa_consensus_methods(D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,
                           pseudocount=1.0, occupancy=0.5):
     """MSA positional-consensus barycenter registry (mirrors :func:`softdtw_ssg_methods`).
 
@@ -1527,7 +1549,7 @@ def msa_consensus_methods(D_G, nu=1e-4, lmbda=0.1, window=None,
     }
 
 
-def discreteness_lever_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
+def discreteness_lever_methods(D_G, gamma=1.0, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,
                                dba_max_iters=30, sdtw_max_iter=50, ssg_max_iter=30,
                                fgw_alpha=0.5, fgw_n_nodes=128, fgw_max_iter=100,
                                cat_rounds=6, cat_inner_iter=8):
@@ -1572,7 +1594,7 @@ def discreteness_lever_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
         # --- Lever 2: ground-cost (D_G) decode, snap once at the end ---
         'dba_dtw_dg': {
             'build': lambda X, seed: barycenter_dba_dtw(
-                X, D_G, max_iters=dba_max_iters, random_state=seed, decode='dg'),
+                X, D_G, max_iter=dba_max_iters, random_state=seed, decode='dg'),
             'distance': dist_rtwe_native,
         },
         'soft_dtw_bary_dg': {
@@ -1594,7 +1616,7 @@ def discreteness_lever_methods(D_G, gamma=1.0, nu=1e-4, lmbda=0.1, window=None,
         # --- Lever 3: per-iteration re-discretised categorical variants ---
         'dba_dtw_cat': {
             'build': lambda X, seed: barycenter_dba_dtw(
-                X, D_G, max_iters=dba_max_iters, random_state=seed,
+                X, D_G, max_iter=dba_max_iters, random_state=seed,
                 discretise_each_iter=True, decode='dg'),
             'distance': dist_rtwe_native,
         },

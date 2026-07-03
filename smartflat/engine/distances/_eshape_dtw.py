@@ -22,6 +22,16 @@ from smartflat.engine.distances._rtwe import rtwe_distance
 from smartflat.engine.distances._utils import _convert_to_list, _is_multivariate
 
 
+# Fixed inner rTWE operating point for the Edit-Shape DTW local cost. DELIBERATELY
+# decoupled from the OUTER edit penalties (the ``nu``/``lmbda`` args of the public
+# functions below): the inner sequences here are single columns (shape (1, 1)), so the
+# rTWE stiffness/time terms are near-inert. This is a vendored implementation detail,
+# NOT the smartflat rTWE operating point (see baselines.RTWE_NU / RTWE_LMBDA). Named and
+# frozen byte-identical in Kickoff M; see ARC_AUDIT.md Dimension 1 / Dimension 5.
+_ESHAPE_INNER_RTWE_NU = 0.001
+_ESHAPE_INNER_RTWE_LMBDA = 0.01
+
+
 def eshape_dtw_distance(
     x: np.ndarray,
     y: np.ndarray,
@@ -149,7 +159,12 @@ def _eshape_dtw_cost_matrix(
     precomputed_distances: Optional[np.ndarray] = None,
     step_sequ: int = 1,
 ) -> np.ndarray:
-    """Core Edit-Shape DTW cost matrix using rTWE as inner distance."""
+    """Core Edit-Shape DTW cost matrix using rTWE as inner distance.
+
+    The inner rTWE cost uses the FIXED module-level operating point
+    ``_ESHAPE_INNER_RTWE_NU`` / ``_ESHAPE_INNER_RTWE_LMBDA``, independent of the
+    OUTER ``nu``/``lmbda`` edit penalties passed to this function.
+    """
     x_size = x.shape[1]
     y_size = y.shape[1]
     nx = len(range(1, x_size, step_sequ))
@@ -157,9 +172,6 @@ def _eshape_dtw_cost_matrix(
 
     x_cols = [np.ascontiguousarray(x[:, i][None, :]) for i in range(1, x_size, step_sequ)]
     y_cols = [np.ascontiguousarray(y[:, i][None, :]) for i in range(1, y_size, step_sequ)]
-
-    nu_rtwe = 0.001
-    lmbda_rtwe = 0.01
 
     cost_matrix = np.zeros((nx, ny))
     cost_matrix[0, 1:] = np.inf
@@ -174,25 +186,25 @@ def _eshape_dtw_cost_matrix(
 
                 # Deletion in x
                 del_x_rtwe_dist = rtwe_distance(
-                    xip, xi, nu=nu_rtwe, lmbda=lmbda_rtwe,
+                    xip, xi, nu=_ESHAPE_INNER_RTWE_NU, lmbda=_ESHAPE_INNER_RTWE_LMBDA,
                     precomputed_distances=precomputed_distances,
                 )
                 del_x = cost_matrix[i - 1, j] + del_x_rtwe_dist + del_add
 
                 # Deletion in y
                 del_y_rtwe_dist = rtwe_distance(
-                    yjp, yj, nu=nu_rtwe, lmbda=lmbda_rtwe,
+                    yjp, yj, nu=_ESHAPE_INNER_RTWE_NU, lmbda=_ESHAPE_INNER_RTWE_LMBDA,
                     precomputed_distances=precomputed_distances,
                 )
                 del_y = cost_matrix[i, j - 1] + del_y_rtwe_dist + del_add
 
                 # Match
                 match_same_rtwe_d = rtwe_distance(
-                    xi, yj, nu=nu_rtwe, lmbda=lmbda_rtwe,
+                    xi, yj, nu=_ESHAPE_INNER_RTWE_NU, lmbda=_ESHAPE_INNER_RTWE_LMBDA,
                     precomputed_distances=precomputed_distances,
                 )
                 match_prev_rtwe_d = rtwe_distance(
-                    xip, yjp, nu=nu_rtwe, lmbda=lmbda_rtwe,
+                    xip, yjp, nu=_ESHAPE_INNER_RTWE_NU, lmbda=_ESHAPE_INNER_RTWE_LMBDA,
                     precomputed_distances=precomputed_distances,
                 )
                 match = (

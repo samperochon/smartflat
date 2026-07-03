@@ -35,6 +35,8 @@ import pandas as pd
 
 from smartflat.engine.distances._rtwe import rtwe_distance
 from smartflat.features.symbolic_barycenter.baselines import (
+    RTWE_NU,
+    RTWE_LMBDA,
     _transition_matrix,
     barycenter_transition_matrix,
 )
@@ -177,7 +179,7 @@ def _metrics_one(spec, bary_native, seq, hist, kind, X_group, D_G, G, M,
 
 
 def score_barycenter_quality(X_symbolic, labels, methods, D_G, D_pairwise=None,
-                             n_inits=3, random_state=42, rtwe_nu=1e-4, rtwe_lmbda=0.1):
+                             n_inits=3, random_state=42, rtwe_nu=RTWE_NU, rtwe_lmbda=RTWE_LMBDA):
     """Score every method's per-group barycenter on representation-quality metrics.
 
     Parameters
@@ -278,7 +280,7 @@ def quality_table(df, agg='mean'):
 
 
 def build_fgw_registry(D_G, alphas, n_nodes=128, encodings=('mds', 'onehot'),
-                       nu=1e-4, lmbda=0.1, max_iter=100):
+                       nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=100):
     """Registry of FGW methods across an ``alpha`` sweep and encodings (no cherry-picking).
 
     Produces entries named ``fgw_{encoding}_a{alpha}`` so a single

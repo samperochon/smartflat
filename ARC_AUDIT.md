@@ -72,14 +72,19 @@ that `baselines.py` is the arc's junk drawer.
   `nu*|i−j|` L202). *Numerically near-inert* — the inner sequences are single columns `(1,1)`
   (L158-159) so stiffness/time barely bite — but it is an undocumented surprise and a **4th**
   distinct `nu/lmbda` operating point. Pre-dates the F arc (vendored). *Fix (Phase 1):* thread the
-  passed values through or document the fixed inner cost.
+  passed values through or document the fixed inner cost. **— DONE (Kickoff M):** named module constants
+  `_ESHAPE_INNER_RTWE_NU`/`_ESHAPE_INNER_RTWE_LMBDA` + a docstring line marking them the fixed, decoupled
+  inner cost (values `0.001/0.01` kept **byte-identical**; not threaded — that would move
+  `test_distances_eshape_dtw`).
 - **[P2] `visualization.py` stale TODO + misplaced import — FIXED (Phase 0).** Removed the
   `plot_signals` `# TODO: 'info' was a notebook global` and moved the mid-file
   `utils_visualization` import to the header.
 - **[P2] API-naming drift in builders** — `barycenter_dba_dtw(max_iters=…)` (plural,
   `baselines.py:191`) vs `max_iter` everywhere else; hand-rolled `barycenter_soft_dtw` (`:331`)
   lacks the `decode=` param its tslearn sibling `barycenter_softdtw` (`:368`) carries. *Fix
-  (Phase 1):* rename with a back-compat alias.
+  (Phase 1):* rename with a back-compat alias. **— DONE (Kickoff M):** `max_iters`→`max_iter` with a
+  deprecation-warning `max_iters` alias (internal + test callers migrated). The `barycenter_soft_dtw`
+  `decode=` parity was **deferred to Phase 3** — a public-signature widening outside this session's guardrail.
 - **[P3] Four functions have no in-file caller but are NOT dead** — `barycenter_mean_rtwe_dba`
   (`:890`), `pmatch_to_barycenter_stock_twe` (`:1083`), `dist_neg_pmatch_stock` (`:1109`),
   `ordinal_cost_matrix` (`:105`). Repo-wide grep: all four are exercised by `test_baselines.py`
@@ -182,7 +187,13 @@ and notebooks (both now addressed in Phase 0).* Committed numbers are safe (note
   A caller relying on defaults gets a *different* operating point per function. *Fix (Phase 1,
   gated by an oracle no-op proof):* a single `RTWE_NU=1e-4, RTWE_LMBDA=0.1` referenced by all
   higher layers; keep `_rtwe.py` kernel defaults; migration called out and proven a no-op on the
-  committed §17–§20 numbers.
+  committed §17–§20 numbers. **— DONE (Kickoff M):** `baselines.RTWE_NU=1e-4`/`RTWE_LMBDA=0.1` are now the
+  default for all **16** smartflat-layer functions/registries (5 were the drifted `0.001/1.0`; the other 11
+  already `1e-4/0.1`, now referencing the constant) plus `barycenter_quality`'s yardstick; `_rtwe.py` kernel
+  defaults untouched. The L=128 merged 5-registry `quality_table` (18 methods) + a gated `evaluate_baselines`
+  were frozen to CSV before/after the edits — **byte-identical** (md5 unchanged). **No migration surfaced:**
+  the repo-wide call-site audit found zero caller relying on the old default for a `nu`/`lmbda`-sensitive
+  value. Guard `tests/test_rtwe_hparam_consistency.py`; details in RESULTS_HANDOFF §22.
 - **[P2] `FAMILY` taxonomy dict duplicated across notebooks — FIXED (Phase 0).** 06i/06j shared a
   literal (06j = 06i + `msa_consensus`), 06k a divergent copy. Added canonical
   `barycenter_quality.FAMILY` + `family_of()` (+ `tests/test_family_taxonomy.py`) for future
@@ -214,9 +225,12 @@ step; no registry-key/builder-default change without an oracle-backed no-op proo
 - **Phase 0 (this session, on `barycenter-arc-audit-L`) — DONE:** conftest→`_bary_helpers` fixture
   extraction · `visualization.py` TODO+import cleanup · PAPER_BRIDGE Tier-D pointer · canonical
   `FAMILY`/`family_of()` + test · this `ARC_AUDIT.md` + RESULTS_HANDOFF §21 pointer.
-- **Phase 1 (own branch) — `nu`/`lmbda` unification + naming:** module-level `RTWE_NU`/`RTWE_LMBDA`
-  referenced by all higher layers; thread/document the eshape inner-cost hardcode; rename
-  `max_iters`→`max_iter`. **Gate:** a frozen `quality_table` CSV oracle proving a no-op on §17–§20.
+- **Phase 1 (branch `barycenter-nu-lmbda-unify`) — `nu`/`lmbda` unification + naming — DONE (Kickoff M):**
+  `baselines.RTWE_NU=1e-4`/`RTWE_LMBDA=0.1` referenced by all 16 smartflat-layer defaults (+ the harness
+  yardstick); eshape inner-cost named `_ESHAPE_INNER_RTWE_NU/LMBDA` (byte-identical); `max_iters`→`max_iter`
+  + back-compat alias; `PAPER_BRIDGE.md` §6 footnoted (thesis `1e-5` vs shipped `1e-4`). **Gate met:** the
+  L=128 merged `quality_table` + `evaluate_baselines` CSV oracles are **byte-identical** before/after; guard
+  `tests/test_rtwe_hparam_consistency.py`; RESULTS_HANDOFF §22.
 - **Phase 2 (own branch) — `baselines.py` split** into distances/builders/registries with
   back-compat re-exports; a public-surface test first; move file-by-file, suite green each step.
 - **Phase 3 (own branch) — reusability polish:** curate `__init__` re-exports; realign
