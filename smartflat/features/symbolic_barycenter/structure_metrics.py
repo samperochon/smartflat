@@ -687,6 +687,15 @@ def evaluate_incremental_structure(
     discriminates. Outer ``RepeatedStratifiedKFold`` split list is enumerated once so all three
     feature sets are scored on identical folds.
 
+    .. note::
+        Caveat -- the ``both - hist`` CI resamples the per-``(repeat, fold)`` paired deltas
+        as if i.i.d., but repeated-CV folds share subjects across repeats, so the effective
+        sample size is smaller than ``n_repeats * n_folds`` and the CI **width is mildly
+        anti-conservative** (optimistically narrow). The point delta and its **sign are
+        unaffected** (they are well inside the interval); the confirmatory reads used in the
+        arc all remain valid. Escalating to a subject-level / block bootstrap is deferred
+        unless a paper claim needs the tighter guarantee.
+
     Parameters
     ----------
     X_symbolic : list of int arrays (ragged ok) or (n, T) array.
@@ -779,6 +788,16 @@ def evaluate_structure_length_controlled(
     Use this, not :func:`evaluate_incremental_structure` alone, when reporting a structure claim on a
     cohort whose sequence lengths differ by group: a positive ``delta_struct_given_len`` CI (excludes
     0) is the length-robust result.
+
+    .. note::
+        Two caveats, both inert here. (1) The ``length`` column is standardised with a
+        **global** mean/std computed over all administrations (test folds included). This is
+        not a leakage concern: RF is scale-invariant and the logreg pipe re-standardises
+        inside each training fold, so the global scaling only sets the units of a column the
+        classifiers ignore or re-scale. (2) The incremental-delta CIs use the same
+        per-``(repeat, fold)`` i.i.d. bootstrap as :func:`evaluate_incremental_structure`, so
+        their **width is mildly anti-conservative** (repeated-CV folds share subjects); the
+        point deltas and their signs are unaffected.
 
     Returns
     -------

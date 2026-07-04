@@ -534,6 +534,13 @@ sequence's symbol multiset **exactly**, and report **ΔAUC = AUC_intact − mean
 from the shuffle distribution. Because the shuffle holds frequency fixed and the **same pipeline** scores
 intact and shuffled data, classifier optimism cancels in ΔAUC — the null is its own control.
 
+> **Rigor note (Kickoff O, terminology).** The interval reported here (and the "95% CI" column
+> in the table below) is a **permutation-null band** — `AUC_intact` minus the 2.5/97.5 percentiles
+> of the shuffle distribution — not a sampling-CI of ΔAUC; `ci_low > 0` is exactly a one-sided
+> permutation test (see `order_information`'s docstring). No family-wise correction is applied across
+> the 15 (comparison × feature × null) cells; this is acceptable because the verdict is all-null
+> (0/15), and a multiplicity correction can only *strengthen* an already-null result.
+
 **Two nulls** (both per-sequence ⇒ the unigram histogram is exactly invariant): `token` (uniform
 permutation; destroys order **and** dwell → ΔAUC = all structure beyond bare frequency) and `runlength`
 (permute the order of runs; preserves per-symbol dwell-time distribution → ΔAUC = *pure sequencing*, frequency
@@ -629,6 +636,16 @@ Leakage-guarded incremental AUC, 10×5 RepeatedStratifiedKFold; struct = 13 de-c
 Patient-vs-Control: structure alone reaches 0.81 (vs hist 0.74) and the incremental Δ over frequency
 excludes 0 for **both** classifiers — the honest positive E's global-order test did not find. HEALTHY-vs-RIL
 is partial (logreg only, hist already strong); RIL-vs-TBI null.
+
+> **Rigor note (Kickoff O).** The `Δ 95% CI` above (and in §16.3) is a percentile bootstrap over the
+> per-`(repeat, fold)` paired deltas resampled i.i.d. Because repeated-CV folds **share subjects across
+> repeats**, the effective sample size is below `n_repeats × n_folds`, so the CI **width is mildly
+> anti-conservative** (optimistically narrow). This does **not** move the point deltas or their signs —
+> the Patient-vs-Control positive sits well inside its interval — so the reported verdicts stand; a
+> subject-level / block bootstrap is the escalation if a paper needs the tighter width. Separately, the
+> length column in `evaluate_structure_length_controlled` is standardised with a **global** mean/std
+> (test folds included); this is inert — RF is scale-invariant and the logreg pipe re-standardises inside
+> each training fold. Both caveats are now recorded in the two evaluators' docstrings.
 
 ### 16.2 Descriptive per-metric group stats (Cliff's δ, BH over 48 tests) — with a length caveat
 
@@ -1194,3 +1211,41 @@ import X` changes**.
 **Public API (recall):** all pre-split imports are unchanged — `from smartflat.features.symbolic_barycenter.baselines
 import X` resolves for every X (public and private), and the concrete modules
 (`…symbolic_barycenter.{distances,builders,registries,evaluation}`) are now also importable directly for new code.
+
+---
+
+## 24. Arc-audit finish — reusability polish + rigor caveats (Kickoff O, 2026-07-04)
+
+**Branch `barycenter-reusability-rigor`** (off N's tip `eb09e95`). The **final polish** of the
+E→F→G→…→O arc, closing the last `ARC_AUDIT.md` Dimension-3/4 items (planned Phases 3 & 4). Pure
+**doc/docstring + additive no-op** session: **no new method, no changed default, no moved number.**
+Frozen suite **236 → unchanged** (the run reports **240** = 236 + 4 new package-surface tests).
+
+- **Reusability (Phase 3).** (1) `symbolic_barycenter/__init__.py` now curates package-level re-exports
+  (was docstring-only): the 10 library submodules + the harness entry points
+  (`score_barycenter_quality`, `order_information`, `evaluate_incremental_structure`, `build_g28_ground_cost`,
+  …) + the **baseline/method surface re-exported at runtime from `baselines.__all__`** (self-syncing — no
+  hardcoded list to drift), so `from …symbolic_barycenter import barycenter_fgw` now works. `__all__` = 80
+  names; new guard `tests/test_symbolic_barycenter_surface.py` (4 tests: all names resolve, representative
+  API reachable, baseline surface in lock-step, no import cycle). (2) `rtwe_alignment_path` gained a bold
+  docstring **arg-order warning** — `precomputed_distances` is its 3rd-positional required arg (siblings put
+  it last), so pass it by keyword; the one flagged caller (`visualization.py`) was already keyword-safe, so
+  no code change (the `@njit` signature is retained). (3) `barycenter_soft_dtw` gained a `decode='euclidean'`
+  parity param matching its tslearn sibling — proven a **byte-for-byte no-op** at the default
+  (`np.array_equal` vs the pre-change output on the `_bary_helpers` cohort). (4) The `dba_dtw` native-distance
+  divergence (`dist_dtw` in `default_baseline_methods` vs `dist_rtwe` in `discreteness_lever_methods` →
+  `inertia_native` not comparable across those registries; `inertia_rtwe` yardstick is) is now a `.. note::`
+  in **both** registry docstrings.
+
+- **Rigor caveats (Phase 4, doc-first, zero code).** Folded into the code docstrings **and** here:
+  §16's Δ(both−hist) CI (and the length-controlled sibling) resamples per-`(repeat, fold)` paired deltas
+  i.i.d. while repeated-CV folds share subjects → **CI width mildly anti-conservative, sign unaffected**
+  (subject-level bootstrap deferred); the length column is globally standardised but that is **inert** (RF
+  scale-invariant, logreg re-standardises per fold); §15's "95% CI" is a **permutation-null band** with **no
+  FWER correction** across its 15 all-null cells (acceptable). MSA's Gusfield bound reworded to
+  "2-approximation **under a metric ground cost**."
+
+- **Gate.** Frozen suite green after every step, pass count **unchanged (236)** aside from the +4 surface
+  tests; `git diff` is **only** the additive `decode=` param, curated re-exports, and doc/docstring text —
+  zero numeric-literal or algorithm changes. `ARC_AUDIT.md` Phases 3 & 4 marked **DONE**; the E→F→G→…→O
+  arc audit is **fully resolved** (all P0/P1/P2 addressed; residual P3s recorded as notes).

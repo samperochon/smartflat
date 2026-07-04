@@ -25,6 +25,16 @@ def default_baseline_methods(D_G, gamma=1.0, nu=RTWE_NU, lmbda=RTWE_LMBDA, windo
     Wasserstein->Wasserstein (histogram), k-medoid->TW-TWE, majority-voting->
     lock-step Hamming.
 
+    .. note::
+        ``dba_dtw`` is scored here by its native ``dist_dtw``. In
+        :func:`discreteness_lever_methods` the sibling DBA keys (``dba_dtw_dg`` /
+        ``dba_dtw_cat``) are scored by ``dist_rtwe`` instead. The shared
+        ``inertia_rtwe`` yardstick (fixed ``RTWE_NU``/``RTWE_LMBDA``) is comparable
+        across every registry, but ``inertia_native`` for the DBA base method is
+        **not comparable** between these two registries (different distance). This
+        divergence is intentional -- each registry scores its methods on the distance
+        they would actually be used with -- and is documented rather than standardised.
+
     Parameters
     ----------
     D_G : np.ndarray of shape (G, G)
@@ -208,6 +218,13 @@ def discreteness_lever_methods(D_G, gamma=1.0, nu=RTWE_NU, lmbda=RTWE_LMBDA, win
     so results stay byte-for-byte reproducible. Reported ablation-style (both ways, no
     cherry-picked winner). Each native distance mirrors the base method (``dist_rtwe`` for
     DBA/SSG/FGW, ``dist_soft_dtw`` for the soft-DTW pair), so the harness scores every axis.
+
+    .. note::
+        The DBA keys here (``dba_dtw_dg``/``dba_dtw_cat``) use ``dist_rtwe`` as their
+        native distance, whereas ``dba_dtw`` in :func:`default_baseline_methods` uses
+        ``dist_dtw``. The shared ``inertia_rtwe`` yardstick is comparable across every
+        registry, but ``inertia_native`` for the DBA base method is **not comparable**
+        between the two registries (see the matching note there).
 
     **Lever 2 -- ground-cost-consistent decode** (``decode='dg'``: ``argmin_c m[c]``, the
     vocabulary-restricted 1-medoid under ``D_G``; snap once at the end). Same

@@ -99,7 +99,8 @@ def barycenter_dba_dtw(X_symbolic, D_G, max_iter=30, tol=1e-5, random_state=None
     return project_real_to_symbolic(barycenter, D_G, decode=decode)
 
 
-def barycenter_soft_dtw(X_symbolic, D_G, gamma=1.0, max_iter=30, random_state=None):
+def barycenter_soft_dtw(X_symbolic, D_G, gamma=1.0, max_iter=30, random_state=None,
+                        decode='euclidean'):
     """Baseline A6: Soft-DTW barycenter on prototype-distance embeddings.
 
     Gradient-descent approximation (Cuturi & Blondel 2017).
@@ -116,6 +117,10 @@ def barycenter_soft_dtw(X_symbolic, D_G, gamma=1.0, max_iter=30, random_state=No
         Maximum iterations.
     random_state : int or None
         Random seed for initialization.
+    decode : {'euclidean', 'dg'}
+        Decode rule handed to :func:`project_real_to_symbolic` (Lever 2). Default
+        ``'euclidean'`` = unchanged; parity with the tslearn sibling
+        :func:`barycenter_softdtw`.
 
     Returns
     -------
@@ -133,7 +138,7 @@ def barycenter_soft_dtw(X_symbolic, D_G, gamma=1.0, max_iter=30, random_state=No
         barycenter -= lr * grad
         lr *= 0.95  # decay
 
-    return project_real_to_symbolic(barycenter, D_G)
+    return project_real_to_symbolic(barycenter, D_G, decode=decode)
 
 
 def barycenter_softdtw(X_symbolic, D_G, gamma=1.0, max_iter=50, random_state=None,
@@ -551,7 +556,7 @@ def barycenter_msa_consensus(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, wind
     occupancy rule, instead of an iterative single reference whose length is clamped to the
     reference).
 
-    Algorithm -- **center-star MSA** (Gusfield 1993; 2-approximation for a metric cost)
+    Algorithm -- **center-star MSA** (Gusfield 1993; 2-approximation under a metric ground cost)
     with a **profile per-column consensus** (Durbin, Eddy, Krogh & Mitchison 1998):
 
     1. Pick the star **center** = within-group rTWE medoid (argmin summed pairwise rTWE).

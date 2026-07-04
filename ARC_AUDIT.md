@@ -94,6 +94,8 @@ that `baselines.py` is the arc's junk drawer.
   (Phase 1):* rename with a back-compat alias. **— DONE (Kickoff M):** `max_iters`→`max_iter` with a
   deprecation-warning `max_iters` alias (internal + test callers migrated). The `barycenter_soft_dtw`
   `decode=` parity was **deferred to Phase 3** — a public-signature widening outside this session's guardrail.
+  **— DONE (Kickoff O):** `barycenter_soft_dtw(..., decode='euclidean')` added (no-op default, threaded to
+  `project_real_to_symbolic`); byte-for-byte oracle-proven on the `_bary_helpers` cohort.
 - **[P3] Four functions have no in-file caller but are NOT dead** — `barycenter_mean_rtwe_dba`
   (`:890`), `pmatch_to_barycenter_stock_twe` (`:1083`), `dist_neg_pmatch_stock` (`:1109`),
   `ordinal_cost_matrix` (`:105`). Repo-wide grep: all four are exercised by `test_baselines.py`
@@ -125,7 +127,8 @@ internally consistent with the numbers; no silent correctness bug found.
 - **[P3] MSA "2-approximation" claim is conditional** — Gusfield's center-star 2-approx holds only
   for a **metric** ground cost. The docstring (`:787`) asserts it unconditionally. rTWE is
   TWE-derived (metric for a metric `D_G`, `nu,lmbda≥0`), so it likely transfers, but phrase it
-  "2-approximation **under a metric ground cost**." Doc-only (Phase 3/4).
+  "2-approximation **under a metric ground cost**." Doc-only (Phase 3/4). **— DONE (Kickoff O):**
+  reworded to "2-approximation under a metric ground cost."
 
 ## Dimension 3 — Rigor (statistical / methodological)
 
@@ -152,11 +155,15 @@ interrupted by the session limit — a cheap optional re-confirmation, not a blo
   per-(repeat,fold) paired deltas as if i.i.d. (`structure_metrics.py:740-743`), but repeated-CV
   folds share subjects across repeats → variance can be underestimated. Doesn't overturn the sign
   (point deltas well inside CI); the width is optimistic. *Fix (Phase 4):* note the caveat, or move
-  to a subject-level / block bootstrap.
+  to a subject-level / block bootstrap. **— DONE (Kickoff O):** caveat noted in
+  `evaluate_incremental_structure` / `evaluate_structure_length_controlled` docstrings + §16
+  (width anti-conservative, sign unaffected); subject-level bootstrap left as opt-in escalation.
 - **[P3] Length standardized before CV** (`structure_metrics.py:798-799`, global mean/std incl.
   test folds) — inert for RF (scale-invariant) and re-standardized by the logreg pipe; worth a note.
+  **— DONE (Kickoff O):** noted in `evaluate_structure_length_controlled` docstring + §16.
 - **[P3] No family-wise correction across §15's 15 cells** — acceptable: the verdict is all-null
-  (0/15), and correcting a null only strengthens it.
+  (0/15), and correcting a null only strengthens it. **— DONE (Kickoff O):** one-line note added to
+  §15 (with the "permutation-null band" wording fix).
 
 ## Dimension 4 — Reusability
 
@@ -169,15 +176,20 @@ are imported not re-copied (roadmap contract honored). Three small frictions.
   `_nested_cv_auc`/`_make_clf`/`_rle` from the owners (no fourth CV/RLE copy) — roadmap §2/§4 met.
 - **[P2] `symbolic_barycenter/__init__.py` re-exports nothing** (docstring-only) — the F-arc API is
   reachable only via full submodule paths; contrast `engine/distances/__init__.py` with a proper
-  `__all__`. *Fix (Phase 3):* curated re-exports.
+  `__all__`. *Fix (Phase 3):* curated re-exports. **— DONE (Kickoff O):** curated `__all__` (80 names) —
+  submodules + harness entry points + the baseline surface re-exported at runtime from
+  `baselines.__all__` (self-syncing); guard `tests/test_symbolic_barycenter_surface.py`; no import cycle.
 - **[P2] `rtwe_alignment_path` puts `precomputed_distances` 3rd-positional** (`_rtwe.py:424`) while
   `rtwe_distance`/`rtwe_cost_matrix`/`rtwe_alignment_path_with_costs` and `eshape_dtw_alignment_path`
   all put it last → callers pass it positionally in one place (`visualization.py:503`), by keyword
-  elsewhere. Footgun. *Fix (Phase 3):* keyword-safe realignment or a prominent note.
+  elsewhere. Footgun. *Fix (Phase 3):* keyword-safe realignment or a prominent note. **— DONE (Kickoff O):**
+  post-N the flagged caller already passes it by keyword (no caller broken), so the fix is a **prominent
+  docstring warning** (pass by keyword); the `@njit` signature is retained (reordering would be breaking).
 - **[P2] Same base method, two native distances:** `barycenter_dba_dtw` is scored by `dist_dtw` in
   `default_baseline_methods` (`:1379`) but by `dist_rtwe` (native) in `discreteness_lever_methods`
   (`dba_dtw_dg`/`dba_dtw_cat`). The common `inertia_rtwe` yardstick is unaffected (fixed), but
   `inertia_native` for "dba_dtw" is **not comparable** across registries. Document, or standardize.
+  **— DONE (Kickoff O):** documented (not standardized) via a `.. note::` in **both** registry docstrings.
 
 ## Dimension 5 — Internal consistency (highest-yield axis)
 
@@ -247,13 +259,27 @@ step; no registry-key/builder-default change without an oracle-backed no-op proo
   functions + 2 constants moved **byte-identical** (AST-verified). One white-box test's stale
   shim-monkeypatch retargeted to the real lookup sites (no production change). Frozen suite (13 files
   incl. the surface test) → **236 passed**. RESULTS_HANDOFF §23.
-- **Phase 3 (own branch) — reusability polish:** curate `__init__` re-exports; realign
-  `rtwe_alignment_path` arg order (keyword-safe); document the `dba_dtw` native-distance divergence.
-- **Phase 4 (doc-first) — rigor caveats:** fold the bootstrap-anti-conservatism + length-standardization
-  notes into §16 / docstrings; escalate to a subject-level bootstrap only if the paper needs it.
+- **Phase 3 (branch `barycenter-reusability-rigor`) — reusability polish — DONE (Kickoff O):**
+  `symbolic_barycenter/__init__.py` curated re-exports (10 submodules + harness entry points + the
+  baseline surface re-exported at runtime from `baselines.__all__`; `__all__`=80; guard
+  `tests/test_symbolic_barycenter_surface.py`); `rtwe_alignment_path` arg-order **docstring warning**
+  (the one flagged caller was already keyword-safe → no code change, `@njit` signature retained);
+  `barycenter_soft_dtw` gained `decode='euclidean'` parity (byte-for-byte no-op at default, oracle-proven);
+  `dba_dtw` native-distance divergence documented in **both** registry docstrings. RESULTS_HANDOFF §24.
+- **Phase 4 (doc-first) — rigor caveats — DONE (Kickoff O):** bootstrap-anti-conservatism +
+  length-standardization notes folded into `evaluate_incremental_structure` /
+  `evaluate_structure_length_controlled` docstrings and §16; §15 "95% CI"→permutation-null band + no-FWER
+  note; MSA "2-approximation **under a metric ground cost**." No numbers moved (rigor = notes, not
+  re-analysis); subject-level bootstrap left as an opt-in escalation.
 
-Phases 1–2 each merit a `.claude/prompts/kickoff-{M,N}-*.md` sub-session prompt; Phases 3–4 can
-share a lighter clean-up sub-session.
+Phases 1–2 each merit a `.claude/prompts/kickoff-{M,N}-*.md` sub-session prompt; Phases 3–4 shared a
+lighter clean-up sub-session (Kickoff O).
+
+**Arc-audit closure (Kickoff O, 2026-07-04):** the **E→F→G→…→O arc audit is fully resolved** — every
+P0/P1/P2 across all five dimensions is addressed (Phase 0 consistency fixes; M `nu`/`lmbda` unification +
+naming; N `baselines.py` split; O reusability + rigor). The residual **P3** items are all recorded as
+explicit docstring/handoff notes rather than code changes (MSA metric qualifier, §15 band wording &
+no-FWER, length-standardization, fold-level bootstrap width, `test_baselines.py` `D5` conftest shadow).
 
 ## Verification strategy
 

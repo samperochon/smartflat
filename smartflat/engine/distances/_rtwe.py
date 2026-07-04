@@ -432,6 +432,16 @@ def rtwe_alignment_path(
 ) -> Tuple[List[Tuple[int, int]], float]:
     """Compute the rTWE alignment path between two symbolic sequences.
 
+    .. warning::
+        Argument-order quirk. Here ``precomputed_distances`` is the **3rd positional,
+        required** argument, whereas its siblings ``rtwe_distance`` /
+        ``rtwe_cost_matrix`` / ``rtwe_alignment_path_with_costs`` /
+        ``eshape_dtw_alignment_path`` all place it **last, with a ``None`` default**.
+        Always pass it **by keyword** (``precomputed_distances=D_G``) so a copied
+        sibling call site does not silently bind ``window``/``nu`` to the wrong slot.
+        The signature is retained (this is a ``@njit`` kernel; reordering would be a
+        breaking positional change) -- the fix is the keyword convention.
+
     Parameters
     ----------
     x, y : np.ndarray
