@@ -802,7 +802,7 @@ a tractable length.
 ## 18. Library-backed Soft-DTW + SSG barycenters into the quality harness (Kickoff F·S2, 2026-07-02)
 
 **Branch `barycenter-quality-fgw`** (session **F·S2**, continuing F on the same branch). Adds the two
-averagers §17 deferred — now **library-backed (tslearn 0.8.1), not hand-rolled** — and scores them with the
+averagers §17 deferred — now **library-backed (tslearn 0.6.4), not hand-rolled** — and scores them with the
 **existing** §17 harness (extend-by-reuse; **no harness change**). Method-development + **gated preview**
 session: implement, unit-test, and print a G=28 preview at L=128; the full-length (L≈5162) / full-cohort run
 is a **`pomme` hand-off** (stub in `06i`, not run locally).
@@ -1249,3 +1249,44 @@ Frozen suite **236 → unchanged** (the run reports **240** = 236 + 4 new packag
   tests; `git diff` is **only** the additive `decode=` param, curated re-exports, and doc/docstring text —
   zero numeric-literal or algorithm changes. `ARC_AUDIT.md` Phases 3 & 4 marked **DONE**; the E→F→G→…→O
   arc audit is **fully resolved** (all P0/P1/P2 addressed; residual P3s recorded as notes).
+
+---
+
+## 25. Pomme regeneration — cross-platform reproduction of §15–§20 (Kickoff J, 2026-07-04)
+
+**Host `pomme` (Linux), branch `barycenter-reusability-rigor` @ `8e6ea80`.** The §15–§20 numbers/CSVs/figures
+were computed on the **macOS dev host** during E→K; only the code is portable. This session regenerated the
+full artifact superset on the **data host** and verified it against the committed tables — which also
+independently confirms the L→O refactors reproduce on real data. Env: a lock-pinned conda env
+(`smartflat_repro`) matching `requirements-lock.txt` on **every** compute lib — **tslearn 0.6.4, POT
+0.9.6.post1, numba 0.60.0, scikit-learn 1.5.2, scipy 1.12.0, numpy 1.26.4** — with pandas held at 1.5.3 (the
+sole deviation, forced so the cached dataframes unpickle; pandas is only the load container, so **number-
+neutral**). Frozen 14-file suite **240 passed** (matches dev), so the M/N/O guards
+(`rtwe_hparam_consistency`, `baselines_public_surface`, `symbolic_barycenter_surface`) are intact.
+
+**Headline: every §15–§20 verdict, ranking and relationship reproduces. Exact point estimates drift within
+macOS→Linux platform (BLAS/LAPACK) numerical variance — not from the refactors.** The drift is cleanly
+isolated: the **closed-form `wasserstein` histogram matches to 3 decimals** on every table (freq 0.027→0.027,
+entropy 3.729→3.724), while only the **iterative optimizers** shift at the platform-FP level (logreg
+nested-CV; FGW conditional-gradient; MDS eigendecomposition; soft-DTW L-BFGS-B; DBA/SSG/MSA rTWE iterations).
+A code change from M/N/O would have moved `wasserstein` too — it did not — so the `nu`/`lmbda` unification (M),
+`baselines` split (N) and `__init__` re-exports (O) are **confirmed inert on real data**.
+
+| § | nb | committed verdict | pomme reproduction |
+|---|---|---|---|
+| 15 | 06f | 0/15 order signals | **MATCH** — 0/15 both hosts (no CI `ci_low>0`); `auc_intact` drifts ±0.02–0.07 (nested-CV BLAS); the "order-hurts" cell stays CI<0 (−0.073→−0.103), the lone p=0.05 hint **weakened** to p=0.13 |
+| 16 | 06h | Ctrl-vs-Pat structure survives length | **MATCH** on every headline claim — §16.3 Ctrl-vs-Pat excludes 0 for **both** clf (+0.038/+0.033 → +0.023/+0.029); §16.1 Ctrl-vs-Pat positive both clf; HEALTHY-vs-RIL length-driven. Two **borderline RIL-vs-TBI cells** (the comparison §16.4 calls "null throughout") cross the line in **null-consistent** directions — §16.1 logreg excl>0 (dev CI-low was 0.0002) → brackets 0; §16.3 rf brackets 0 → excl<0 (structure slightly *hurts*). BH-significant 24→**23**/48 |
+| 17 | 06g | FGW faithful/anti-collapse; α=1 hurts | **MATCH** — rankings preserved (FGW freq ~0.04, `tw_twe_mode` collapse entropy 3.02, MV 0.19; alignment methods win rTWE); α=1 degrades 0.250/0.184. Optimizer values ±2–5% (`fgw_mds` largest — MDS eigendecomp is the most BLAS-sensitive) |
+| 18 | 06i | soft-DTW/SSG on the frontier | **MATCH** — rTWE-compact (47.1/45.8), partial collapse; **stability soft_dtw 0.0 / ssg 0.87** (≈dev 0.86); soft_dtw more collapsed than ssg; `family` A/B intact |
+| 19 | 06j | MSA ≈ `tw_twe_mode`, deterministic | **MATCH** — msa marginally more compact than `tw_twe_mode` (42.94 vs 43.82), slightly less collapsed; **stability = 0.0 exactly** (deterministic) |
+| 20 | 06k | levers → compact+collapsed; fgw a wash | **MATCH** — dg/cat variants more rTWE-compact than their Euclidean/continuous siblings; `fgw_onehot_dg` a wash (77.4→77.4) |
+
+The committed §15–§20 tables are the **canonical macOS dev-host values** and are left **unchanged**; the pomme
+reproduction is reported here rather than overwritten (both are correct — the differences are platform, not
+method). **No seed was tuned to restore a prior verdict.** Executed notebooks committed with figures on this
+branch. **Notebook fix:** `06h`'s incremental-structure compute branch did `inc = evaluate_incremental_structure(...)`,
+but that function returns a `(folds, summary)` tuple (its tested API); the branch was never exercised on the
+dev host (cache-hit), so the stale single-assignment surfaced on the fresh host — fixed to `_folds, inc = …`
+(one line). **Doc fix:** §18.1 "tslearn 0.8.1" corrected to the pinned **0.6.4** (`requirements-lock.txt`;
+`pyproject.toml` bounds `tslearn>=0.6,<0.7`). Step 6 (full-length L≈5162 scale run) launched separately on
+pomme; its `*_FULL.csv` tables are additive evidence, not a replacement for the L=128 previews.
