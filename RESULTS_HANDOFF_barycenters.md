@@ -1142,3 +1142,55 @@ committed §17–§20 number stays byte-for-byte reproducible.
 
 **Public API (recall):** `from smartflat.features.symbolic_barycenter.baselines import RTWE_NU, RTWE_LMBDA`.
 Everything else is unchanged — no registry-key or public-signature change beyond the `max_iters` alias.
+
+---
+
+## 23. `baselines.py` split into distances/builders/registries/evaluation (Kickoff N, 2026-07-04)
+
+**Branch `barycenter-baselines-split`** (off the Kickoff-M tip `d1164a3`; executes `ARC_AUDIT.md` **Phase 2**).
+A pure **structural, behaviour-preserving** session — no new method, no changed default, no moved number.
+The arc's 2131-line junk-drawer `baselines.py` (≥6 jobs, `ARC_AUDIT.md` Dimension 1 P1) is split into four
+cohesive modules; `baselines.py` becomes a thin back-compat re-export shim so **not one `from …baselines
+import X` changes**.
+
+- **The partition (4 modules, byte-identical moves).** `distances.py` (433 L) — `RTWE_NU`/`RTWE_LMBDA`,
+  embed/decode (`embed_symbolic_to_real`, `project_real_to_symbolic`, `_snap_and_reembed`, `_symbols_to_str`,
+  `_classical_mds`), cost helpers (`ordinal_cost_matrix`, `_transition_matrix`), DTW/soft-DTW primitives, and
+  every `dist_*`/`pmatch_*`; imports **nothing internal** (vendored `_rtwe`/`_eshape_dtw` stay lazy-imported
+  inside functions). `builders.py` (926 L) — the 17 `barycenter_*` constructors (+ `_categorical_outer_loop`),
+  importing embed/decode + primitives from `.distances`. `registries.py` (283 L) — the six `*_methods`
+  `{build, distance}` registry builders, wiring `.builders` constructors to `.distances` scores.
+  `evaluation.py` (508 L, the optional 4th file — kept separate to leave `registries.py` purely the method
+  dicts) — CV helpers (`_make_clf`, `_nested_cv_auc`), evaluators (`evaluate_baselines`,
+  `evaluate_incremental_ordering`, `baseline_significance_tests`), feature/label utilities, and the bootstrap
+  CIs. **Dependency arrows are acyclic:** `distances → builders → {registries, evaluation}` (verified: no
+  distances→builder back-edge; the one evaluation→builders edge is `evaluate_baselines` calling
+  `barycenter_k_medoid`).
+
+- **The shim contract.** `baselines.py` (97 L) = original docstring + `from .{distances,builders,registries,
+  evaluation} import *` + **explicit** re-export of the 14 private-but-imported helpers (`import *` skips
+  underscore names) + an `__all__` listing all **61** pre-split names (59 defs + 2 constants). Every symbol
+  any repo file imported from `…baselines` (52 grepped, incl. `_make_clf`/`_nested_cv_auc`/`_pairwise_subsets`/
+  `_transition_matrix`/`_snap_and_reembed`, imported by `order_evaluation.py`/`structure_metrics.py`/tests)
+  still resolves. `barycenter_quality.py`'s `from …baselines import RTWE_NU, RTWE_LMBDA` and the M guard test
+  keep working via the shim.
+
+- **The gates (a pure move → import-surface + the frozen suite, not a numeric oracle).**
+  `tests/test_baselines_public_surface.py` (written FIRST, green on the untouched tree) asserts every one of
+  the 61 names is importable from the shim path. Every moved function was proven **byte-identical** against
+  the git original via AST source-segment diff (59/59, full coverage, constants preserved). Frozen suite
+  (11 M-suite files + `test_family_taxonomy` + the new surface test = 13 files) → **236 passed, 13 warnings**
+  (was 234; +2 surface-test cases, warning count unchanged).
+
+- **The one disclosed consequence — a stale white-box monkeypatch (not a production change).**
+  `test_dba_dtw_cat_reference_is_integer_every_iteration` monkeypatched `baselines.embed_symbolic_to_real`
+  to spy on re-embeds. Pre-split, `barycenter_dba_dtw`'s direct embed and its per-iter `_snap_and_reembed`
+  both resolved to the single module global, so one patch caught both. Post-split they look up
+  `embed_symbolic_to_real` in `builders` / `distances` respectively, so the shim patch no longer intercepts.
+  The **production code is byte-identical**; the fix retargets the spy to both real lookup sites
+  (`builders.embed_symbolic_to_real` + `distances.embed_symbolic_to_real`) — Python's "patch where it's
+  looked up." It was the only monkeypatch of a baselines internal in the whole suite.
+
+**Public API (recall):** all pre-split imports are unchanged — `from smartflat.features.symbolic_barycenter.baselines
+import X` resolves for every X (public and private), and the concrete modules
+(`…symbolic_barycenter.{distances,builders,registries,evaluation}`) are now also importable directly for new code.

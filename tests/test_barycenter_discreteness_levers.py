@@ -151,7 +151,14 @@ def test_dba_dtw_cat_reference_is_integer_every_iteration(monkeypatch):
         calls['n'] += 1
         return orig(x_symbolic, dg)
 
-    monkeypatch.setattr(B, 'embed_symbolic_to_real', spy)
+    # baselines.py is now a thin re-export shim (arc-audit Phase 2): barycenter_dba_dtw
+    # (builders.py, initial embed) and its per-iter _snap_and_reembed (distances.py) each
+    # look up embed_symbolic_to_real in their OWN module namespace, so the spy must patch
+    # both real lookup sites -- pre-split a single baselines-global patch caught both.
+    monkeypatch.setattr(
+        'smartflat.features.symbolic_barycenter.builders.embed_symbolic_to_real', spy)
+    monkeypatch.setattr(
+        'smartflat.features.symbolic_barycenter.distances.embed_symbolic_to_real', spy)
     b = barycenter_dba_dtw(X, d_g, max_iter=3, random_state=0,
                            discretise_each_iter=True, decode='dg')
     assert calls['n'] >= 2                                  # initial embed + >=1 per-iter re-embed

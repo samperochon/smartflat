@@ -65,7 +65,16 @@ that `baselines.py` is the arc's junk drawer.
   `bootstrap_*`). Every arc session appended here. *Fix (Phase 2):* split into `distances.py` +
   `builders.py` + `registries.py`, re-export from `baselines.py` for back-compat. *Note:* there is
   **no** configured linter (no ruff/pylint block in `pyproject.toml`), so the "too-many-lines
-  warning" is not literally firing — the size itself is the signal.
+  warning" is not literally firing — the size itself is the signal. **— DONE (Kickoff N):** split
+  into **four** modules — `distances.py` (433 L), `builders.py` (926 L), `registries.py` (283 L),
+  `evaluation.py` (508 L, the 4th file: CV/evaluator/bootstrap cluster split out to keep
+  `registries.py` purely the method dicts); `baselines.py` is now a **97-line back-compat shim**
+  (`import *` + explicit private re-exports + `__all__` of all 61 names). All 59 functions +
+  2 constants moved **byte-identical** (AST-verified). No consumer edited except one white-box test:
+  `test_dba_dtw_cat_reference_is_integer_every_iteration` monkeypatched the shim's
+  `embed_symbolic_to_real`, which post-split no longer intercepts the call inside `builders`/`distances`
+  — patch retargeted to both real lookup sites (production code untouched). Guard
+  `tests/test_baselines_public_surface.py`; RESULTS_HANDOFF §23.
 - **[P2, dual accuracy] `_eshape_dtw_cost_matrix` hardcodes the inner rTWE cost** at
   `nu_rtwe=0.001, lmbda_rtwe=0.01` (`_eshape_dtw.py:161-162`), ignoring the `nu`/`lmbda` passed to
   `eshape_dtw_distance` (those drive only the *outer* edit penalties, `del_add=nu+lmbda` L167,
@@ -231,8 +240,13 @@ step; no registry-key/builder-default change without an oracle-backed no-op proo
   + back-compat alias; `PAPER_BRIDGE.md` §6 footnoted (thesis `1e-5` vs shipped `1e-4`). **Gate met:** the
   L=128 merged `quality_table` + `evaluate_baselines` CSV oracles are **byte-identical** before/after; guard
   `tests/test_rtwe_hparam_consistency.py`; RESULTS_HANDOFF §22.
-- **Phase 2 (own branch) — `baselines.py` split** into distances/builders/registries with
-  back-compat re-exports; a public-surface test first; move file-by-file, suite green each step.
+- **Phase 2 (branch `barycenter-baselines-split`) — `baselines.py` split — DONE (Kickoff N):**
+  split into `distances.py`/`builders.py`/`registries.py`/`evaluation.py` (4 modules; `evaluation.py`
+  the extra file) with `baselines.py` a 97-line back-compat re-export shim; public-surface test
+  (`tests/test_baselines_public_surface.py`) written first and green on the untouched tree; all 59
+  functions + 2 constants moved **byte-identical** (AST-verified). One white-box test's stale
+  shim-monkeypatch retargeted to the real lookup sites (no production change). Frozen suite (13 files
+  incl. the surface test) → **236 passed**. RESULTS_HANDOFF §23.
 - **Phase 3 (own branch) — reusability polish:** curate `__init__` re-exports; realign
   `rtwe_alignment_path` arg order (keyword-safe); document the `dba_dtw` native-distance divergence.
 - **Phase 4 (doc-first) — rigor caveats:** fold the bootstrap-anti-conservatism + length-standardization
