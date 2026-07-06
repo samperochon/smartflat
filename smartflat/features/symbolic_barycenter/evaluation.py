@@ -272,23 +272,45 @@ def transition_features(X_symbolic, G):
     return feats
 
 
-def _pairwise_subsets(labels):
-    """Yield ``(comparison_name, mask, y_binary)`` for the three paper comparisons.
+_SDS2_LABELS = frozenset({'HEALTHY', 'RIL', 'TBI'})
 
-    ``mask`` selects the two groups from ``labels`` (HEALTHY/RIL/TBI or the pooled
-    CONTROL/PATIENT); ``y_binary`` is 1 for the second group of the pair.
+
+def _pairwise_subsets(labels):
+    """Yield ``(comparison_name, mask, y_binary)`` group-discrimination comparisons.
+
+    ``mask`` selects the two groups from ``labels``; ``y_binary`` is 1 for the second
+    group of the pair. Two regimes, auto-selected from the label vocabulary:
+
+    - **SDS2 cohort** (labels ⊆ {HEALTHY, RIL, TBI}): byte-identical to the three
+      frozen paper comparisons — ``HEALTHY_vs_RIL``, ``RIL_vs_TBI``, and the pooled
+      ``CONTROL_vs_PATIENT``. The committed §15/§16 numbers are unchanged.
+    - **Any other vocabulary** (generalization datasets, PAPER_TODO §2): all unordered
+      class pairs, so the same order/structure harnesses run unchanged on new datasets.
+      To bound the comparisons on a many-class dataset, filter ``labels``/``X`` to the
+      classes of interest before calling the harness.
     """
     labels = np.asarray(labels, dtype=object)
-    pooled = make_patient_control_labels(labels)
-    specs = [
-        ('HEALTHY_vs_RIL', ('HEALTHY', 'RIL'), labels),
-        ('RIL_vs_TBI', ('RIL', 'TBI'), labels),
-        ('CONTROL_vs_PATIENT', ('CONTROL', 'PATIENT'), pooled),
-    ]
-    for name, (g1, g2), lab in specs:
-        mask = np.isin(lab, [g1, g2])
-        y = (lab[mask] == g2).astype(int)
-        yield name, mask, y
+    uniq = {lab for lab in labels
+            if lab is not None and not (isinstance(lab, float) and np.isnan(lab))}
+    if uniq <= _SDS2_LABELS:
+        pooled = make_patient_control_labels(labels)
+        specs = [
+            ('HEALTHY_vs_RIL', ('HEALTHY', 'RIL'), labels),
+            ('RIL_vs_TBI', ('RIL', 'TBI'), labels),
+            ('CONTROL_vs_PATIENT', ('CONTROL', 'PATIENT'), pooled),
+        ]
+        for name, (g1, g2), lab in specs:
+            mask = np.isin(lab, [g1, g2])
+            y = (lab[mask] == g2).astype(int)
+            yield name, mask, y
+    else:
+        classes = sorted(uniq, key=str)
+        for i in range(len(classes)):
+            for j in range(i + 1, len(classes)):
+                g1, g2 = classes[i], classes[j]
+                mask = np.isin(labels, [g1, g2])
+                y = (labels[mask] == g2).astype(int)
+                yield f'{g1}_vs_{g2}', mask, y
 
 
 def _make_clf(name):
