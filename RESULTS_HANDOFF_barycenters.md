@@ -1288,5 +1288,17 @@ branch. **Notebook fix:** `06h`'s incremental-structure compute branch did `inc 
 but that function returns a `(folds, summary)` tuple (its tested API); the branch was never exercised on the
 dev host (cache-hit), so the stale single-assignment surfaced on the fresh host — fixed to `_folds, inc = …`
 (one line). **Doc fix:** §18.1 "tslearn 0.8.1" corrected to the pinned **0.6.4** (`requirements-lock.txt`;
-`pyproject.toml` bounds `tslearn>=0.6,<0.7`). Step 6 (full-length L≈5162 scale run) launched separately on
-pomme; its `*_FULL.csv` tables are additive evidence, not a replacement for the L=128 previews.
+`pyproject.toml` bounds `tslearn>=0.6,<0.7`).
+
+**Step 6 (full-length L≈5162 scale run) — attempted, then abandoned as impractical.** Two detached runs (the
+first killed by a session teardown, the second `setsid`-detached and disconnect-proof) each ran **>25 h wall
+(~2.25 of 96 cores) and never completed even the first of three method families (`softdtw_ssg`)** — no
+`*_FULL.csv` was produced. Root cause is fundamental, not tunable: at L≈5162 the per-cell cost is O(L²·G) ≈
+**1626×** the L=128 preview, and the dominant work — the soft-DTW *barycenter* (scipy L-BFGS-B over the 28-dim
+`D_G` embedding) and the MSA O(n²·L²) medoid — is **single-threaded per build**, so the idle cores can't be
+used without a process-level rewrite; even ideal `(group×method×init)` parallelism leaves `msa_consensus`
+(only 3 group-units) and `discreteness_levers` at ~a day each. `n_inits 3→1` only divides by 3. **Decision:
+skip the full-length run; the L=128 previews (§17–§20), now reproduced on pomme, stand as the representative
+methods×quality result.** The stubs remain in `06i`/`06j`/`06k` for anyone with a parallelised harness or a
+much shorter L; a **tractable middle ground is L≈512** (~100× cheaper, matches §13.3's faithful-length check)
+if a longer-than-128 confirmation is ever wanted.
