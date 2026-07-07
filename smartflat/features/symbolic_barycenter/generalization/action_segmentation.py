@@ -61,6 +61,71 @@ def default_root(name):
     return os.path.join(get_data_root(), *DATA_SUBDIR, name)
 
 
+# The canonical MS-TCN release: one 30 GB Zenodo zip bundling ``data/<name>/{features,
+# groundTruth,mapping.txt,splits}`` for breakfast/50salads/gtea. Only the tiny GT text
+# (a few MB) is pulled via HTTP Range — the heavy I3D ``features/`` are never downloaded.
+ZENODO_DATA_URL = 'https://zenodo.org/api/records/3625992/files/data.zip/content'
+
+
+def download_action_seg(name, root=None, force=False, pace=0.5, max_retries=8):
+    """Fetch just ``mapping.txt`` + ``groundTruth/*.txt`` for ``name`` via HTTP Range.
+
+    Uses :mod:`remotezip` to selectively pull the GT members from :data:`ZENODO_DATA_URL`
+    (Zenodo honours ``Accept-Ranges: bytes``) — never the 30 GB features. Extracts with the
+    ``data/<name>/`` prefix stripped so files land at ``<root>/mapping.txt`` and
+    ``<root>/groundTruth/*.txt``, exactly where :func:`load_action_seg` reads them.
+
+    One Range GET per file, so a large dataset (Breakfast ≈ 1712 files) is many requests:
+    ``pace`` seconds between them keeps under Zenodo's rate limit, and a 429 triggers
+    exponential backoff (up to ``max_retries``). **Resumable** — already-downloaded files are
+    skipped, so a re-run after a throttle continues where it left off. Idempotent: a
+    ``<root>/.download_complete`` flag short-circuits once complete unless ``force=True``.
+    Returns the resolved ``root``. Requires ``pip install remotezip``.
+    """
+    if name not in DATASETS:
+        raise KeyError(f"unknown action-seg dataset {name!r}; known: {sorted(DATASETS)}")
+    root = root or default_root(name)
+    flag = os.path.join(root, '.download_complete')
+    if os.path.isfile(flag) and not force:
+        return root
+    import time
+    from remotezip import RemoteZip  # lazy: keeps the loader importable without remotezip
+    prefix = f'data/{name}/'
+    gt_prefix = prefix + 'groundTruth/'
+    os.makedirs(os.path.join(root, 'groundTruth'), exist_ok=True)
+    with RemoteZip(ZENODO_DATA_URL) as rz:
+        members = [m for m in rz.namelist()
+                   if m == prefix + 'mapping.txt'
+                   or (m.startswith(gt_prefix) and m.endswith('.txt'))]
+        if not members:
+            raise RuntimeError(
+                f"no GT members matching {prefix!r} in {ZENODO_DATA_URL}")
+        fetched = 0
+        for m in members:
+            dest = os.path.join(root, m[len(prefix):])  # strip 'data/<name>/'
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if os.path.exists(dest) and os.path.getsize(dest) > 0:
+                continue  # resumable
+            for attempt in range(max_retries):
+                try:
+                    data = rz.read(m)
+                    break
+                except Exception as e:  # noqa: BLE001 — retry Zenodo 429 throttling
+                    if '429' in str(e) and attempt < max_retries - 1:
+                        time.sleep(min(60, 2 ** attempt))
+                    else:
+                        raise
+            with open(dest, 'wb') as out:
+                out.write(data)
+            fetched += 1
+            if pace:
+                time.sleep(pace)
+    with open(flag, 'w') as fh:
+        fh.write('ok\n')
+    print(f"[download_action_seg] {name}: {fetched} new files -> {root}")
+    return root
+
+
 def read_mapping(path, background=()):
     """Read ``mapping.txt`` (``"<id> <name>"``) → ``{name: id}``, remapped so the
     background label(s) occupy id **0** (the harness's reserved background symbol)."""
