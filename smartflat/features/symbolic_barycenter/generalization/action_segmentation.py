@@ -42,15 +42,53 @@ def _const_activity(name):
     return lambda stem: name
 
 
+# --- full filename-stem parsers: subject / camera view / trial / activity ------------
+# The activity_fn above is all load_action_seg needs; these expose the *rest* of what the
+# stem encodes, which is what identifies a distinct physical **execution** (see
+# :func:`dedup_by_execution`) and what supplies alternative labellings (:func:`trial_labels`).
+
+def _breakfast_parse(stem):
+    """``'P16_cam01_P16_cereals'`` -> subject ``P16``, view ``cam01``, activity ``cereals``.
+
+    All 1712 stems have exactly four ``_``-separated fields, the third a redundant repeat
+    of the subject. 52 subjects (P03-P54) x 10 activities x up to 5 simultaneous views.
+    """
+    parts = stem.split('_')
+    return {'subject': parts[0], 'view': parts[1] if len(parts) > 2 else None,
+            'trial': None, 'activity': parts[-1]}
+
+
+def _50salads_parse(stem):
+    """``'rgb-01-1'`` -> subject ``01``, trial ``1``: 25 subjects x 2 attempts, one recipe."""
+    parts = stem.split('-')
+    return {'subject': parts[1] if len(parts) > 1 else stem, 'view': None,
+            'trial': parts[2] if len(parts) > 2 else None, 'activity': 'salad'}
+
+
+def _gtea_parse(stem):
+    """``'S1_Cheese_C1'`` -> subject ``S1``, trial ``C1``, activity ``Cheese``."""
+    parts = stem.split('_')
+    return {'subject': parts[0], 'view': None,
+            'trial': parts[2] if len(parts) > 2 else None,
+            'activity': _gtea_activity(stem)}
+
+
 DATASETS = {
     # background labels are remapped to symbol 0 (the harness's reserved background).
     'breakfast': dict(background=('SIL',), activity_fn=_breakfast_activity,
-                      n_videos=1712, n_classes=10),
+                      parse_fn=_breakfast_parse, n_videos=1712, n_classes=10),
     '50salads':  dict(background=('action_start', 'action_end'),
-                      activity_fn=_const_activity('salad'), n_videos=50, n_classes=1),
+                      activity_fn=_const_activity('salad'), parse_fn=_50salads_parse,
+                      n_videos=50, n_classes=1),
     'gtea':      dict(background=('background',), activity_fn=_gtea_activity,
-                      n_videos=28, n_classes=7),
+                      parse_fn=_gtea_parse, n_videos=28, n_classes=7),
 }
+
+# Breakfast records each execution from several cameras at once; when more than one view
+# of the same execution survives, keep the highest-priority one. Order is by prevalence
+# (cam01 433 files, webcam01 365, webcam02 338, stereo01 304, cam02 272) so the retained
+# subset is as large and as homogeneous as possible.
+VIEW_PRIORITY = ('cam01', 'webcam01', 'webcam02', 'cam02', 'stereo01')
 
 # Where the GT lives by default (git-ignored, download-on-demand). Overridable via ``root``.
 DATA_SUBDIR = ('generalization',)
@@ -227,3 +265,69 @@ def build_action_seg_ground_cost(name, X=None, kind='cooccurrence',
     else:
         raise ValueError(f"kind must be 'cooccurrence' or 'uniform', got {kind!r}")
     return compute_distance_matrix(raw, method=method, offset_value=offset_value)
+
+
+# --- post-hoc views over a loaded dataset --------------------------------------------
+# Deliberately *not* folded into load_action_seg: notebooks 06m/06m2/06m3 are committed
+# against its current output, so these take the already-loaded (meta, X, labels) instead
+# of adding a behavioural flag to a function whose defaults must not move.
+
+def parse_video_id(name, stem):
+    """``(dataset, filename stem)`` -> ``{'subject', 'view', 'trial', 'activity'}``.
+
+    ``stem`` is ``meta['video']`` **without** its ``.txt`` (``load_action_seg`` stores the
+    basename *with* the extension). Fields the dataset does not encode are ``None``.
+    """
+    if name not in DATASETS:
+        raise KeyError(f"unknown action-seg dataset {name!r}; known: {sorted(DATASETS)}")
+    return DATASETS[name]['parse_fn'](stem)
+
+
+def dedup_by_execution(meta, X, labels, name, *, view_priority=VIEW_PRIORITY):
+    """Keep one sequence per distinct **execution** — i.e. per ``(subject, trial, activity)``.
+
+    Breakfast films each execution with up to five cameras simultaneously, and the frame-
+    level GT of those views is the *same* annotation: **98.8%** of cross-view sequences are
+    byte-identical after RLE (symbol-set Jaccard median 1.000). So its 1712 "videos" are
+    only **503** independent executions, ~3.4 near-duplicates each. The harness's
+    :class:`RepeatedStratifiedKFold` is not group-aware, so leaving them in puts copies of
+    the same execution in train *and* test — the classifier can recognise rather than
+    generalise. Any per-sequence CV on Breakfast should run on the deduplicated set.
+
+    A no-op for datasets whose stems encode no view (50Salads, GTEA): their ``(subject,
+    trial, activity)`` keys are already unique. 50Salads' two trials are *distinct*
+    executions and are kept — ``trial`` is part of the key.
+
+    Returns ``(meta, X, labels, idx)`` — all filtered to ``idx`` (sorted positions into the
+    originals), ``meta`` re-indexed.
+    """
+    rank = {v: i for i, v in enumerate(view_priority)}
+    best = {}
+    for i, video in enumerate(meta['video']):
+        d = parse_video_id(name, os.path.splitext(video)[0])
+        key = (d['subject'], d['trial'], d['activity'])
+        r = rank.get(d['view'], len(view_priority))
+        if key not in best or r < best[key][0]:
+            best[key] = (r, i)
+    idx = np.array(sorted(i for _, i in best.values()), dtype=int)
+    return (meta.iloc[idx].reset_index(drop=True), [X[i] for i in idx],
+            np.asarray(labels, dtype=object)[idx], idx)
+
+
+def trial_labels(meta, name='50salads'):
+    """Relabel by attempt number: ``'trial1'`` / ``'trial2'``.
+
+    50Salads' 25 subjects each prepare the **same recipe twice**, so the two classes share
+    a vocabulary *by construction* — no restriction needed to control frequency. That makes
+    it a real-data **negative control** rather than a test: we have strong prior reason to
+    believe the two attempts are exchangeable, so the order-null firing here would indicate
+    a broken probe, not a discovery. (Its measured ``hist_auc`` is 0.459 — below chance,
+    the signature of the same-subject pairing pulling predictions toward the wrong label.)
+
+    The comparison is paired (every subject appears in *both* classes), which the harness's
+    non-grouped CV does not model. That is conservative, not leaky: subject identity is
+    exactly uninformative about the label, so it cannot be exploited to inflate AUC.
+    """
+    return np.array(
+        ['trial' + str(parse_video_id(name, os.path.splitext(v)[0])['trial'])
+         for v in meta['video']], dtype=object)

@@ -12,6 +12,8 @@ Submodules (added per phase):
     validity proof (Phase 1).
   - :mod:`.action_segmentation` — ground-truth action-label datasets used *directly*
     as symbols (Breakfast / 50Salads / GTEA / …; Phase 2).
+  - :mod:`.headroom` — frequency-control: does a task leave the order-null any room to
+    fire, and how to construct one that does (Phase 2).
   - :mod:`.bpi`, :mod:`.ucr` — cross-domain breadth (process mining, UCR/UEA; Phase 3).
 """
 from .suite import run_generalization_suite
