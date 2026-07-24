@@ -42,7 +42,7 @@ def make_patient_control_labels(labels, patient=('TBI', 'RIL'), control=('HEALTH
 
 def evaluate_baselines(
     X_symbolic, labels, methods, D_pairwise=None,
-    n_splits=10, n_inits=3, random_state=42,
+    n_splits=10, n_inits=3, random_state=42, n_jobs=1,
 ):
     """Run the 50/50 split evaluation protocol with native-distance scoring.
 
@@ -78,6 +78,16 @@ def evaluate_baselines(
         Number of random initializations per split.
     random_state : int
         Base random seed.
+    n_jobs : int
+        Number of processes for the outer (split, init) loop. ``1`` (default)
+        runs serially, exactly as before. Any other value dispatches the
+        independent (split, init) work units across processes with
+        :class:`joblib.Parallel` (``-1`` = all cores). Each unit derives its own
+        seed from ``(split_idx, init_idx)``, so results are identical to the
+        serial run regardless of ``n_jobs`` (only the row order may differ).
+        Parallelism is the practical enabler for full-length (L~5162) runs,
+        where each barycenter build is single-threaded but the ~n_splits*n_inits
+        builds are embarrassingly parallel.
 
     Returns
     -------
@@ -91,68 +101,80 @@ def evaluate_baselines(
     splitter = StratifiedShuffleSplit(
         n_splits=n_splits, test_size=0.5, random_state=random_state,
     )
+    # Materialize splits once so parallel workers can index them deterministically.
+    splits = list(splitter.split(X_symbolic, labels))
 
-    records = []
-    for split_idx, (train_idx, test_idx) in enumerate(splitter.split(X_symbolic, labels)):
+    def _run_split_init(split_idx, init_idx):
+        train_idx, test_idx = splits[split_idx]
         assert len(set(train_idx) & set(test_idx)) == 0, "Train/test leakage detected"
+        seed = random_state + split_idx * 100 + init_idx
+        local_records = []
 
-        for init_idx in range(n_inits):
-            seed = random_state + split_idx * 100 + init_idx
+        for method_name, spec in methods.items():
+            distance_fn = spec['distance']
+            is_medoid = spec.get('kind') == 'medoid'
 
-            for method_name, spec in methods.items():
-                distance_fn = spec['distance']
-                is_medoid = spec.get('kind') == 'medoid'
-
-                # Build one barycenter per group on the training split
-                group_barycenters = {}
-                for grp in unique_groups:
-                    grp_mask = labels[train_idx] == grp
-                    if is_medoid:
-                        if D_pairwise is None:
-                            raise ValueError(
-                                f"method '{method_name}' has kind='medoid' but "
-                                "D_pairwise was not provided"
-                            )
-                        grp_global = train_idx[grp_mask]
-                        D_grp = D_pairwise[np.ix_(grp_global, grp_global)]
-                        group_barycenters[grp] = X_symbolic[grp_global[barycenter_k_medoid(D_grp)]]
-                    else:
-                        group_barycenters[grp] = spec['build'](
-                            X_symbolic[train_idx][grp_mask], seed,
+            # Build one barycenter per group on the training split
+            group_barycenters = {}
+            for grp in unique_groups:
+                grp_mask = labels[train_idx] == grp
+                if is_medoid:
+                    if D_pairwise is None:
+                        raise ValueError(
+                            f"method '{method_name}' has kind='medoid' but "
+                            "D_pairwise was not provided"
                         )
+                    grp_global = train_idx[grp_mask]
+                    D_grp = D_pairwise[np.ix_(grp_global, grp_global)]
+                    group_barycenters[grp] = X_symbolic[grp_global[barycenter_k_medoid(D_grp)]]
+                else:
+                    group_barycenters[grp] = spec['build'](
+                        X_symbolic[train_idx][grp_mask], seed,
+                    )
 
-                # Classify each test sequence by nearest group barycenter
-                # under the method's native distance
-                test_dists = np.zeros((len(test_idx), len(unique_groups)))
-                for gi, grp in enumerate(unique_groups):
-                    bary = group_barycenters[grp]
-                    for ti, tidx in enumerate(test_idx):
-                        test_dists[ti, gi] = distance_fn(X_symbolic[tidx], bary)
+            # Classify each test sequence by nearest group barycenter
+            # under the method's native distance
+            test_dists = np.zeros((len(test_idx), len(unique_groups)))
+            for gi, grp in enumerate(unique_groups):
+                bary = group_barycenters[grp]
+                for ti, tidx in enumerate(test_idx):
+                    test_dists[ti, gi] = distance_fn(X_symbolic[tidx], bary)
 
-                # Pairwise AUC-ROC (higher score -> second group of the pair)
-                test_labels = labels[test_idx]
-                for g1_idx, g1 in enumerate(unique_groups):
-                    for g2_idx, g2 in enumerate(unique_groups):
-                        if g1_idx >= g2_idx:
-                            continue
-                        mask = np.isin(test_labels, [g1, g2])
-                        if mask.sum() < 4:
-                            continue
-                        y_true = (test_labels[mask] == g2).astype(int)
-                        y_score = test_dists[mask, g1_idx] - test_dists[mask, g2_idx]
-                        try:
-                            auc = roc_auc_score(y_true, y_score)
-                        except ValueError:
-                            auc = 0.5
+            # Pairwise AUC-ROC (higher score -> second group of the pair)
+            test_labels = labels[test_idx]
+            for g1_idx, g1 in enumerate(unique_groups):
+                for g2_idx, g2 in enumerate(unique_groups):
+                    if g1_idx >= g2_idx:
+                        continue
+                    mask = np.isin(test_labels, [g1, g2])
+                    if mask.sum() < 4:
+                        continue
+                    y_true = (test_labels[mask] == g2).astype(int)
+                    y_score = test_dists[mask, g1_idx] - test_dists[mask, g2_idx]
+                    try:
+                        auc = roc_auc_score(y_true, y_score)
+                    except ValueError:
+                        auc = 0.5
 
-                        records.append({
-                            'method': method_name,
-                            'split': split_idx,
-                            'init': init_idx,
-                            'comparison': f'{g1}_vs_{g2}',
-                            'auc': auc,
-                        })
+                    local_records.append({
+                        'method': method_name,
+                        'split': split_idx,
+                        'init': init_idx,
+                        'comparison': f'{g1}_vs_{g2}',
+                        'auc': auc,
+                    })
+        return local_records
 
+    tasks = [(s, i) for s in range(n_splits) for i in range(n_inits)]
+    if n_jobs == 1:
+        chunks = [_run_split_init(s, i) for s, i in tasks]
+    else:
+        from joblib import Parallel, delayed
+        chunks = Parallel(n_jobs=n_jobs)(
+            delayed(_run_split_init)(s, i) for s, i in tasks
+        )
+
+    records = [rec for chunk in chunks for rec in chunk]
     return pd.DataFrame(records)
 
 

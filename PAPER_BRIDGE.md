@@ -106,7 +106,7 @@ All items below correspond to the paper's "Session 5" backlog. Sub-sessions 5a, 
 
 | # | Item |
 |---|------|
-| C1 | ~~Baseline comparison notebook~~ **DONE (5e)** — `notebooks/06b_barycenter_baselines.ipynb`: 7-method evaluation (TW-TWE + 6 baselines), 10-split AUC comparison, chronogram visualization, saves `baseline_comparison.csv` |
+| C1 | ~~Baseline comparison notebook~~ **DONE (5e); rewritten onto faithful G=28 (S10, RH §26)** — `notebooks/06b_barycenter_baselines.ipynb` now loads the faithful G=28 embedding-level cohort (`vocab.load_g28_cohort`, median L≈5162) instead of the stale L=64 K-space `X_aeon.npy`, runs the load-bearing roster at **full length L=5162** (process-parallel `evaluate_baselines`), budget-gates the pure-Python DTW baselines, and saves `g28/baseline_comparison_g28.csv` + `g28/baseline_significance_g28.csv` (mode-DBA + Wilcoxon + BH). This is the PAPER_TODO §3.6 P0 run. |
 | C2 | ~~Copy comparison figures~~ **DONE (5e)** — figures saved to `{DATA_ROOT}/outputs/symbolic_barycenter/` and `{DATA_ROOT}/figures/thesis/` (not copied to paper repo per constraint) |
 
 ---
@@ -195,8 +195,8 @@ The Session 9 scientific review (score 3.06/5, major revision) identified findin
 
 | Finding | Code implication |
 |---------|-----------------|
-| **DBA convergence diagnostics** | ~~Add convergence curve~~ **DONE (5b)** — NB06 tracks cost vs. iteration for all 3 groups (20 iterations), saves `chapter_6_dba_convergence.png` + `convergence.csv`. |
-| **Supplementary incomplete** | ~~Baseline figures~~ **DONE (5e)** — NB06b produces `baseline_comparison_auc.png`, `baseline_chronograms.png`, `baseline_wasserstein_histograms.png`. (`chapter_6_barycenters_median_twe.png` was NB08-only and is now **superseded** — NB08 Ch.6 removed, Kickoff H; see §4 map.) |
+| **DBA convergence diagnostics** | ~~Add convergence curve~~ **DONE (5b); G=28 (S10)** — NB06 tracks cost vs. iteration for all 3 groups via `barycenter_mode_dba(return_costs=True)`, saves `g28/chapter_6_dba_convergence.png`. |
+| **Supplementary incomplete** | ~~Baseline figures~~ **DONE (5e); G=28 faithful (S10)** — NB06b produces `g28/g28_auc_bars.png`, `g28/g28_chronograms.png`, `g28/baseline_wasserstein_histograms.png` (the old root `baseline_*` PNGs are quarantined under `_archive_kspace_L64_jun6/`). (`chapter_6_barycenters_median_twe.png` was NB08-only and is now **superseded** — NB08 Ch.6 removed, Kickoff H; see §4 map.) |
 | **Software/code availability statement** | Draft in `COMPANION_CODE.md` section 5. Will reference this repo by name. |
 
 ### MEDIUM
@@ -220,18 +220,25 @@ Figures the paper needs, and which notebook must produce them:
 > below are **superseded / not currently reproduced by any notebook** (they were pre-S2 NB08 figures).
 > **Decide per figure**: regenerate from the g28 layout in `06*`, or drop from the paper in favour of the
 > Session-2 results (§13.2) and 06b baselines.
+>
+> **Update (S10, RH §26):** NB06 was migrated to **G=28** and now writes its `chapter_6_*` figures under
+> `outputs/symbolic_barycenter/g28/` (not the root); its DBA/alignment/convergence cells were repaired to
+> use `barycenter_mode_dba` (the thesis forked-aeon `distance='rtwe'` is uninstalled). NB06b was rewritten
+> onto the faithful G=28 lineage and now produces `g28/g28_auc_bars.png` + `g28/g28_chronograms.png` +
+> `g28/baseline_wasserstein_histograms.png` (replacing the old root `baseline_*` PNGs, now quarantined under
+> `_archive_kspace_L64_jun6/`). The `SUPERSEDED` classification-report row can point to `g28/g28_auc_bars.png`.
 
 | Figure filename | Paper section | Notebook | Status |
 |----------------|---------------|----------|--------|
-| `chapter_6_hyperparameters_searches.png` | Section 3.3 | NB06 Section 1b (sweep ported in 5b) | **DONE (5b)** |
+| `chapter_6_hyperparameters_searches.png` | Section 3.3 | NB06 Section 1b (sweep ported in 5b) | **DONE (5b); now G=28 under `g28/` (S10)** |
 | `chapter_6_distance_matrix_pairwise.png` | Section 5.1 | ~~NB08 `ch6-distance-matrix`~~ (removed, Kickoff H) | **SUPERSEDED** — no current producer (pre-S2) |
-| `chapter_6_non_bg.png` | Section 5.2 | **NB06** (saves it directly) | **DONE** |
+| `chapter_6_non_bg.png` | Section 5.2 | **NB06** (G=28 mode-DBA, saves under `g28/`) | **DONE (G=28, S10)** |
 | `per_label_pathologie_p_values.png` | Section 5.3 | NB07 | REPRODUCIBLE |
-| `chapter_6_classification_report.png` | Section 5.4 | ~~NB08 `ch6-classification-report`~~ (removed, Kickoff H) | **SUPERSEDED** — see 06b `baseline_comparison_auc.png` + §13.2 |
+| `chapter_6_classification_report.png` | Section 5.4 | ~~NB08 `ch6-classification-report`~~ (removed, Kickoff H) | **SUPERSEDED** — see 06b `g28/g28_auc_bars.png` (G=28) + RH §26/§13.2 |
 | `chapter_6_bg.png` | Supplementary Section 1 | ~~NB08 `ch6-barycenter-chronograms`~~ (removed, Kickoff H) | **SUPERSEDED** — no current producer (pre-S2) |
 | `chapter_6_barycenters_median_twe.png` | Supplementary Section 2 | ~~NB08 `ch6-medoid-barycenters`~~ (removed, Kickoff H) | **SUPERSEDED** — no current producer (pre-S2) |
 | `per_label_group_p_values.png` | Supplementary Section 3 | NB07 | REPRODUCIBLE |
-| *Baseline comparison figure(s)* | Supplementary (new) | `06b_barycenter_baselines.ipynb` | **DONE (5e)** |
+| *Baseline comparison figure(s)* | Supplementary (new) | `06b_barycenter_baselines.ipynb` | **DONE (5e); G=28 faithful (S10)** — `g28/g28_auc_bars.png`, `g28/g28_chronograms.png`, `g28/baseline_wasserstein_histograms.png` |
 
 ---
 

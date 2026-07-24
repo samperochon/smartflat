@@ -1,0 +1,104 @@
+{
+  "summary": {
+    "pass": 11,
+    "total": 12
+  },
+  "results": [
+    {
+      "notebook": "06m_generalization_breakfast.ipynb",
+      "status": "ERROR",
+      "fail_cell": null,
+      "ename": "CellTimeoutError",
+      "evalue": "A cell timed out while it was being executed, after 1800 seconds.\nThe message was: Cell execution timed out.\nHere is a preview of the cell contents:\n-------------------\n['# Cap each of the top-6 activ",
+      "secs": 1814.2
+    },
+    {
+      "notebook": "06f_order_shuffle_null.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 2167.0
+    },
+    {
+      "notebook": "06l_generalization_synthetic.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 1511.4
+    },
+    {
+      "notebook": "06e_ordering_vs_frequency.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 1311.5
+    },
+    {
+      "notebook": "06k_discreteness_levers_quality.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 620.2
+    },
+    {
+      "notebook": "06d_audit_and_experiments.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 573.5
+    },
+    {
+      "notebook": "06g_methods_chronogram.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 493.2
+    },
+    {
+      "notebook": "06i_softdtw_ssg_quality.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 263.1
+    },
+    {
+      "notebook": "06j_msa_consensus_quality.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 196.1
+    },
+    {
+      "notebook": "06m3_generalization_gtea.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 108.0
+    },
+    {
+      "notebook": "06m2_generalization_50salads.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 60.0
+    },
+    {
+      "notebook": "06h_structure_metrics.ipynb",
+      "status": "PASS",
+      "fail_cell": null,
+      "ename": null,
+      "evalue": null,
+      "secs": 30.8
+    }
+  ]
+}

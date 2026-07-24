@@ -1,0 +1,37 @@
+{
+  "_comment": "notebook-audit config for smartflat. First authored 2026-07-15 for the 06-series audit. Heavy = full-length L~5162 notebooks (execution skipped by --skip-heavy; still content-audited).",
+  "python": "/home/perochon/anaconda3/envs/temporal_segmentation/bin/python3",
+  "notebook_dir": "notebooks",
+  "kernel_name": "python3",
+  "kernel_pre_path": "",
+  "per_cell_timeout": 1800,
+  "exclude": [],
+  "heavy": [
+    "06_barycenter_averaging.ipynb",
+    "06b_barycenter_baselines.ipynb",
+    "06c_g28_reproduction.ipynb"
+  ],
+  "canonical_sources": [
+    "RESULTS_HANDOFF_barycenters.md",
+    "PAPER_BRIDGE.md",
+    "/home/perochon/paper-chapter-6-barycenters/PAPER_TODO.md",
+    "CLAUDE.md",
+    "ARC_AUDIT.md",
+    "BARYCENTER_METHOD_DISCRETENESS.md"
+  ],
+  "oracle_dir": "tests/_oracles",
+  "number_lock_manifest": "docs/nb_number_lock.json",
+  "conventions": [
+    "Supersession order in RESULTS_HANDOFF_barycenters.md (RH): later sections supersede earlier — §26 > §25 > §13 > §12 > §1–§6. A claim contradicted by a later section is stale even if it matched an earlier one.",
+    "The paper's proposed-method row 0.77/0.84/0.59 is actually the FREQUENCY-BASELINE result; the 0.84 (RIL-vs-Control) is the G=77 histogram, not G=28 and not a TW-TWE win. Any cell implying the proposed TW-TWE+DBA method beats the frequency histogram is a contradicted_claim.",
+    "Canonical barycenter = barycenter_mode_dba (categorical mode update). aeon's mean-based TWE-DBA is categorically wrong for nominal symbols (RH §3.2). The thesis forked-aeon elastic_barycenter_average(distance='rtwe') no longer exists — treating it as runnable is a dead_reference.",
+    "Canonical rTWE operating point: RTWE_NU=1e-4, RTWE_LMBDA=0.1 (RH §22). Four historical HP operating points exist (thesis 1e-5/0.1/δ0.3; K-space re-selected ν0/λ0.5/δ0.3 RH §5; shipped constants 1e-4/0.1 RH §22; G=28 re-selected 1e-3/0.1/offset0.1 RH §26). Quoting an old point inside a clearly-labelled historical/drift note is NOT stale.",
+    "Cohort in code = 24 HEALTHY + 37 RIL + 59 TBI = 120 after filtering; the manuscript's 26 controls / 122 participants is pre-filter. 'HEALTHY' = 'Control'; 'Patient' = RIL+TBI pooled.",
+    "The L=64 K-space (G=77) lineage is superseded (RH §26); its frozen inputs are quarantined under _archive_kspace_L64_jun6/ and must not be read by current notebooks. Current representation = faithful G=28 embedding-level.",
+    "smartflat/features/symbolic_barycenter/baselines.py is a thin back-compat re-export shim; the real modules are distances.py / builders.py / registries.py / evaluation.py. Imports via the shim still resolve (not dead), but prose describing the code should name the real module.",
+    "For the quality roster notebooks (06g/06i/06j/06k): L=128 previews are the canonical results; the full-length L≈5162 Step-6 run was ABANDONED as impractical (RH §25). Claims that full-length quality tables exist or are pending are stale.",
+    "Committed §15–§20 quality tables are the macOS dev-host values; pomme (linux) reproduction values are reported alongside (RH §25), never presented as replacements. Platform FP differences are expected, not bugs.",
+    "The K-space G=77 Hamming stability result (median 0.97) is deprecated-uninformative (RH §6) and must not be fed to the manuscript; the planned replacement is EHI at G=28 (PAPER_TODO §3.5/§6.3).",
+    "Notebooks 06l/06m/06m2/06m3 (generalization) are not yet governed by RESULTS_HANDOFF (which ends at §26): audit them for internal consistency and against PAPER_TODO §2 expectations; their results awaiting a RH §27 is a known gap, not a per-cell error."
+  ]
+}

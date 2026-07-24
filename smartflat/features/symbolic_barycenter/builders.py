@@ -485,7 +485,8 @@ def barycenter_majority_voting(X_symbolic):
     return result
 
 
-def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=10, random_state=None):
+def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=10,
+                        random_state=None, return_costs=False):
     """Mode-based DBA barycenter for categorical symbolic sequences.
 
     Mean-based DBA averages nominal prototype indices (e.g. symbols 2 and 70 -> 36),
@@ -506,11 +507,16 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=
         Maximum number of mode-DBA refinement iterations.
     random_state : int or None
         Unused; kept for a uniform ``build(X, seed)`` signature.
+    return_costs : bool
+        If ``True``, also return the per-iteration total rTWE cost of the sequences
+        against the current reference (the DBA convergence trace). The cost is the
+        alignment distance already computed for each vote, so this adds no work.
 
     Returns
     -------
     np.ndarray of shape (n_timepoints,)
-        Mode-based symbolic barycenter.
+        Mode-based symbolic barycenter. If ``return_costs`` is ``True``, returns
+        ``(barycenter, costs)`` where ``costs`` is a list of per-iteration total costs.
     """
     from collections import Counter
     from smartflat.engine.distances._rtwe import (
@@ -518,20 +524,24 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=
     )
     X = np.asarray(X_symbolic).astype(int)
     if len(X) == 1:
-        return X[0].copy()
+        return (X[0].copy(), []) if return_costs else X[0].copy()
     Dc = np.asarray(D_G, dtype=np.float64)
     Xa = X.astype(np.float64)[:, None, :]
     D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, precomputed_distances=Dc)
     ref = X[int(np.argmin(D.sum(axis=1)))].copy()
+    costs = []
     for _ in range(max_iter):
         votes = [[] for _ in range(len(ref))]
+        iter_cost = 0.0
         for s in X:
-            path, _ = rtwe_alignment_path(
+            path, d = rtwe_alignment_path(
                 s.astype(np.float64), ref.astype(np.float64), Dc, nu=nu, lmbda=lmbda,
             )
+            iter_cost += float(d)
             for (i, j) in path:
                 if 0 <= j < len(ref) and 0 <= i < len(s):
                     votes[j].append(int(s[i]))
+        costs.append(iter_cost)
         new_ref = np.array(
             [Counter(v).most_common(1)[0][0] if v else int(ref[j])
              for j, v in enumerate(votes)],
@@ -540,7 +550,7 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=
         if np.array_equal(new_ref, ref):
             break
         ref = new_ref
-    return ref
+    return (ref, costs) if return_costs else ref
 
 
 def barycenter_msa_consensus(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,

@@ -1302,3 +1302,97 @@ skip the full-length run; the L=128 previews (§17–§20), now reproduced on po
 methods×quality result.** The stubs remain in `06i`/`06j`/`06k` for anyone with a parallelised harness or a
 much shorter L; a **tractable middle ground is L≈512** (~100× cheaper, matches §13.3's faithful-length check)
 if a longer-than-128 confirmation is ever wanted.
+
+---
+
+## 26. Representation-flaw fix — 06b rewritten onto faithful G=28 embedding-level; 06 migrated to G=28 (2026-07-07)
+
+**Motivation.** A review of the `06*` series found a reproducibility flaw: only `06c`/`06d`/`06h`
+built their symbolic sequences from the **faithful representation** — full-length, embedding-level
+(one symbol per VideoMAE timestep, median **L≈5162**, **G=28** category vocabulary;
+change-point segmentation + `majority_voting_inner` propagated back to every embedding index). The
+baseline notebook **`06b`** instead loaded five frozen June-6 artifacts (`X_aeon.npy` = (120,1,64),
+i.e. pre-resampled to **L=64** in the stale **G=77 K-space** vocabulary; plus its `D_G.npy` 77×77,
+`D_twe.npy`, `split_data.pkl`, `barycenters.pkl`, `hyperparameters.json`) that **no current
+notebook regenerated**. Every `06b` figure/CSV derived from that off-lineage L=64 K-space array.
+This is the PAPER_TODO §1.3/§3.6 P0 item ("reproduce `tab:baselines` at G=28 with mode-DBA +
+Wilcoxon + BH").
+
+**Library change (determinism-preserving).** `evaluate_baselines` (`evaluation.py`) gained an
+`n_jobs=1` parameter: the independent `(split, init)` work units dispatch across processes via
+`joblib.Parallel` when `n_jobs≠1`. Each unit derives its own seed from `(split_idx, init_idx)`, so
+results are **bit-identical** to serial (verified: `n_jobs=1` vs `4` → `assert_frame_equal` exact).
+This neutralises §25's "idle cores can't help" blocker: each barycenter build is single-threaded,
+but the ~90 builds are embarrassingly parallel. `builders.barycenter_mode_dba` also gained
+`return_costs=False` (captures the per-iteration rTWE cost already computed in the alignment path —
+zero extra work; default off, so `evaluate_baselines` is unchanged) for 06's convergence figure.
+
+**06b rewrite (length policy).** Single G=28 embedding-level source (`int_cat_segm_embedding_labels`,
+`nu=1e-4, lmbda=0.1, offset=0.3`); every output row carries an `L` column.
+- **Tier B — full length L=5162, 10×3, `n_jobs=30`**: `tw_twe_pmatch`/`tw_twe`/`tw_twe_mean`/
+  `twe_ablation`/`k_medoid`/`wasserstein`/`majority_voting`/`edit_median`. Ran in ~3.2 h wall (mode-DBA
+  ~90 s/build at L=5162, edit-median ~270 s/build, under concurrent load) — the full-length faithful
+  `tab:baselines`.
+- **Tier D — budget-gated preview**: the pure-Python O(L²) `dba_dtw`/`soft_dtw` (measured L^2.1/L^2.0).
+  A timing-probe cell fits a power law and resolves the largest length under a wall-clock cap →
+  `dba_dtw` L=256, `soft_dtw` L=128 (recorded in `g28/baseline_budget.json`). Rows tagged with their L.
+- Figures render at the faithful length (`FIG_L=1500` strip of the L≈5162 rep).
+
+**06 migration (G=77 K-space → G=28).** 06's forked-aeon DBA/alignment/convergence cells were
+**already broken** in the current environment — the thesis fork of aeon
+(`elastic_barycenter_average(distance='rtwe', …)`) is **not installed** (stock aeon 0.11.1 in
+`smartflat_repro`, 1.2.0 in `temporal_segmentation`; both reject the `rtwe` distance). The migration
+swaps the vocabulary to G=28 (`vocab.load_g28_cohort` + `vocab.compute_distance_matrix`) **and
+repairs** those cells by routing the DBA barycenter through `barycenter_mode_dba` (categorical mode
+update, same math) and the alignment ribbons through `compute_alignment_path('rtwe')`. 06 stays the
+HP-search notebook (grid at `HP_L=512`, re-selected G=28 optimum `nu=1e-3, lmbda=0.1, offset=0.1`);
+the headline AUC-vs-L sweep (now `n_jobs`-accelerated, L=5162 in ~110 s) confirms the frequency
+histogram leads at every length (wasserstein 0.79 Patient-v-Control / 0.77 Control-v-RIL at L≈5162;
+alignment `k_medoid`/`tw_twe_mode` rise with L but plateau below; RIL-v-TBI null).
+
+**Result — `tab:baselines` (G=28 faithful, L=5162, mean±std AUC).** The honest, frequency-competitive
+table the paper mandate calls for:
+
+| method (L) | Patient-v-Control | RIL-v-Control | TBI-v-RIL |
+|---|---|---|---|
+| tw_twe_pmatch (proposed, 5162) | 0.69±0.06 | 0.76±0.07 | 0.53±0.05 |
+| tw_twe (5162) | 0.73±0.07 | 0.76±0.07 | 0.57±0.09 |
+| tw_twe_mean (5162) | 0.49±0.11 | 0.54±0.13 | 0.49±0.09 |
+| twe_ablation (5162) | 0.73±0.08 | 0.81±0.06 | 0.57±0.08 |
+| edit_median (5162) | 0.68±0.08 | 0.78±0.08 | 0.55±0.09 |
+| **wasserstein (5162)** | **0.81±0.08** | **0.81±0.04** | 0.57±0.06 |
+| k_medoid (5162) | 0.72±0.05 | 0.73±0.08 | 0.55±0.09 |
+| majority_voting (5162) | 0.65±0.10 | 0.77±0.06 | 0.54±0.06 |
+| dba_dtw (preview, 256) | 0.58±0.07 | 0.59±0.11 | 0.56±0.07 |
+| soft_dtw (preview, 128) | 0.55±0.21 | 0.50±0.18 | 0.54±0.09 |
+
+The **frequency histogram (`wasserstein`) is the top discriminator**; the proposed `tw_twe_pmatch` is
+competitive but not the best. BH-significant vs the proposed method (paired Wilcoxon + BH, 36 tests):
+`tw_twe_mean` **≪** proposed on Patient-v-Control (0.49 vs 0.69, p=0.014) — the **mode-DBA ≫ mean-DBA**
+ablation that justifies the mode update; `wasserstein` **>** proposed on Healthy-v-TBI (0.75 vs 0.66,
+p=0.014); `dba_dtw`/`soft_dtw` worse on Control-v-RIL. Same conclusion as the K-space analysis and
+§13.2, now on the paper's consolidated vocabulary.
+
+**Cross-check.** 06b's deterministic cheap methods at L=5162 match 06c's regenerated
+`g28/auc_vs_L_faithful.csv` **exactly** (Δ=0.0000 on all 12 method×comparison cells:
+wasserstein 0.809/0.812/0.746/0.571, k_medoid 0.730/0.716/0.648/0.550, majority_voting
+0.772/0.654/0.613/0.540) — confirming the rewritten `06b` shares the canonical `06c` data spine.
+
+**Artifact hygiene.** 15 stale files quarantined (not deleted) into
+`outputs/symbolic_barycenter/_archive_kspace_L64_jun6/` with a README: the six off-lineage frozen
+inputs, the six superseded root-dir `06b` outputs, and the three root K-space `chapter_6_*` figures
+(now regenerated under `g28/` by the migrated 06). Left in root (pre-existing, no clear producer,
+mentioned not moved): `convergence.csv`, `hyperparameter_{selection,sweep}.csv`,
+`hamming_stability.json`. Live G=28 replacements under `g28/`: `baseline_comparison_g28.csv`,
+`baseline_significance_g28.csv`, `g28_auc_bars.png`, `g28_chronograms.png`, `g28_DGcat_heatmap.png`,
+`g28_category_frequency_by_group.png`, `baseline_wasserstein_histograms.png`, `baseline_budget.json`,
+`chapter_6_*.png`, `auc_vs_L_g28.{csv,png}`.
+
+**Execution env.** Notebooks run headless with the `smartflat_repro` kernel,
+`NUMBA_THREADING_LAYER=workqueue`, `MPLBACKEND=agg`, committed in-place with figures embedded.
+
+**Deferred (unchanged from §25, now enabled).** The §17–§20 quality roster (`06g/i/j/k`) stays at its
+L=128 previews for this session. The `n_jobs` change removes §25's practical blocker (the independent
+builds now parallelise across the idle cores); promoting those notebooks to L≈5162 is a clean
+follow-up (the soft-DTW barycenter / MSA medoid are still single-threaded *per build*, but there are
+~90 independent builds per method to spread across processes).
