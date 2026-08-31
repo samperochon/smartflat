@@ -41,8 +41,9 @@ def make_patient_control_labels(labels, patient=('TBI', 'RIL'), control=('HEALTH
 
 
 def evaluate_baselines(
-    X_symbolic, labels, methods, D_pairwise=None,
+    X_symbolic, labels, methods=None, D_pairwise=None,
     n_splits=10, n_inits=3, random_state=42, n_jobs=1,
+    methods_factory=None,
 ):
     """Run the 50/50 split evaluation protocol with native-distance scoring.
 
@@ -88,6 +89,15 @@ def evaluate_baselines(
         Parallelism is the practical enabler for full-length (L~5162) runs,
         where each barycenter build is single-threaded but the ~n_splits*n_inits
         builds are embarrassingly parallel.
+    methods_factory : callable, optional
+        ``methods_factory(X_train, labels_train) -> methods dict``, called once
+        per (split, init) work unit with the TRAINING half only. Use this to
+        build fold-specific method registries -- in particular a **leakage-free
+        ground cost** estimated on the training sequences (e.g. via
+        :func:`~.vocab.temporal_ground_cost` + :func:`~.vocab.compute_distance_matrix`)
+        instead of a cohort-level ``D_G`` that has seen the test data. Exactly
+        one of ``methods`` / ``methods_factory`` must be given; ``kind='medoid'``
+        entries still consume the global ``D_pairwise``.
 
     Returns
     -------
@@ -95,6 +105,9 @@ def evaluate_baselines(
         Results with columns: method, split, init, comparison, auc.
     """
     from sklearn.metrics import roc_auc_score
+
+    if (methods is None) == (methods_factory is None):
+        raise ValueError("pass exactly one of `methods` / `methods_factory`")
 
     labels = np.asarray(labels, dtype=object)
     unique_groups = sorted(np.unique(labels))
@@ -110,7 +123,10 @@ def evaluate_baselines(
         seed = random_state + split_idx * 100 + init_idx
         local_records = []
 
-        for method_name, spec in methods.items():
+        fold_methods = methods if methods is not None else methods_factory(
+            X_symbolic[train_idx], labels[train_idx],
+        )
+        for method_name, spec in fold_methods.items():
             distance_fn = spec['distance']
             is_medoid = spec.get('kind') == 'medoid'
 

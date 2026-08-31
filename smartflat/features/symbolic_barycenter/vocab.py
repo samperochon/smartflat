@@ -174,12 +174,27 @@ def compute_distance_matrix(D, method='max_rows_cols_pre', offset_value=0.3, zer
     (index 0) to the per-row/column max so background is maximally far from every
     action.
 
+    .. warning::
+        The thesis recipe adds the offset to the **raw** matrix, so the floor's
+        size relative to the symbol geometry depends on the raw units: the G=28
+        raw W1 matrix has max ~0.48, making ``offset=0.3`` a ~63%-of-scale floor
+        that compresses the off-diagonal range to ``[(d_min + offset) /
+        (d_max + offset), 1]`` ~ [0.39, 1] -- a nearly flat substitution cost
+        under which symbol identity barely matters. ``method='offdiag_pre'`` is
+        the scale-calibrated alternative: normalize the raw matrix to ``[0, 1]``
+        first, then add the offset to off-diagonal entries only and renormalize,
+        so ``offset_value`` is a known fraction of the symbol-geometry scale
+        regardless of raw units (for the G=28 matrix the off-diagonal contrast
+        widens from ~[0.39, 1] to ~[0.23, 1]).
+
     Parameters
     ----------
     D : np.ndarray of shape (G, G)
         Raw symmetric temporal Wasserstein matrix.
     method : str
-        ``'max_rows_cols_pre'`` (thesis) or ``'none'`` (offset + normalize only).
+        ``'max_rows_cols_pre'`` (thesis), ``'offdiag_pre'`` (range-preserving
+        off-diagonal offset + background max), or ``'none'`` (offset + normalize
+        only).
     offset_value : float
         Constant floor added before normalization (thesis used 0.3).
     zero_diagonal : bool
@@ -189,6 +204,20 @@ def compute_distance_matrix(D, method='max_rows_cols_pre', offset_value=0.3, zer
         ``zero_diagonal=False`` for that exact variant.
     """
     D = np.asarray(D, dtype=np.float64).copy()
+    if method == 'offdiag_pre':
+        mx = D.max()
+        if mx > 0:
+            D = D / mx
+        n = D.shape[0]
+        D = D + offset_value * (1.0 - np.eye(n))
+        mx = D.max()
+        if mx > 0:
+            D = D / mx
+        np.fill_diagonal(D, 0.0)
+        D[0, :] = np.max(D, axis=1)
+        D[:, 0] = np.max(D, axis=0)
+        np.fill_diagonal(D, 0.0)
+        return np.ascontiguousarray(D)
     D = D + offset_value
     mx = D.max()
     if mx > 0:
@@ -200,6 +229,186 @@ def compute_distance_matrix(D, method='max_rows_cols_pre', offset_value=0.3, zer
     if zero_diagonal:
         np.fill_diagonal(D, 0.0)
     return np.ascontiguousarray(D)
+
+
+def _weighted_w1(v1, w1, v2, w2):
+    """Exact Wasserstein-1 between two weighted empirical distributions on the line.
+
+    ``W1 = int |F1(t) - F2(t)| dt`` computed on the merged support -- no KDE, no
+    bandwidth, no OT solver needed in 1-D.
+    """
+    v = np.concatenate([v1, v2])
+    order = np.argsort(v, kind='mergesort')
+    v = v[order]
+    d1 = np.concatenate([w1 / w1.sum(), np.zeros(len(v2))])[order]
+    d2 = np.concatenate([np.zeros(len(v1)), w2 / w2.sum()])[order]
+    cdf_gap = np.abs(np.cumsum(d1) - np.cumsum(d2))[:-1]
+    return float(np.sum(cdf_gap * np.diff(v)))
+
+
+def temporal_ground_cost(X, G, weighting='inverse_sqrt', min_count=1):
+    """Leakage-free temporal-occurrence Wasserstein-1 ground cost from raw sequences.
+
+    Re-implements the thesis temporal ``D_G`` construction as a pure function of a
+    **given set of sequences** -- so it can be estimated on a training fold only
+    (pass ``[X[i] for i in train_idx]``), on controls only ("canonical timing"),
+    or on the full cohort (the thesis behaviour, now an explicit choice instead
+    of a baked-in leak). Differences from the thesis pipeline, both deliberate:
+
+    - exact **W1** between weighted empirical distributions (:func:`_weighted_w1`)
+      instead of ``ot.emd2_1d(metric='sqeuclidean')`` -- the paper describes W1,
+      and the empirical form needs no KDE/bandwidth;
+    - no dataframe / cache-file dependency.
+
+    Parameters
+    ----------
+    X : sequence of 1-D int arrays
+        Symbolic sequences (ragged fine). Occurrence times are normalized to
+        ``[0, 1]`` per sequence.
+    G : int
+        Alphabet size (symbols are ``0..G-1``; row/col 0 = background).
+    weighting : {'inverse_sqrt', 'uniform'}
+        ``'inverse_sqrt'`` mirrors the thesis ``inverse_exp`` scheme: a
+        sequence's samples are weighted by ``share**-0.5`` where ``share`` is
+        that sequence's fraction of the symbol's total occurrences (damps
+        long-recording dominance). ``'uniform'`` weights every occurrence
+        equally.
+    min_count : int
+        Symbols with fewer total occurrences get an undefined (NaN) row, filled
+        with the max finite distance afterwards.
+
+    Returns
+    -------
+    np.ndarray of shape (G, G)
+        Raw symmetric W1 matrix (zero diagonal). Apply
+        :func:`compute_distance_matrix` to obtain the rTWE ground cost.
+    """
+    if weighting not in ('inverse_sqrt', 'uniform'):
+        raise ValueError(f"weighting must be 'inverse_sqrt' or 'uniform', got {weighting!r}")
+    # Per symbol: pooled normalized occurrence times + per-sequence weights.
+    times = [[] for _ in range(G)]
+    weights = [[] for _ in range(G)]
+    counts = np.zeros(G)
+    per_seq_counts = []
+    for seq in X:
+        seq = np.asarray(seq).astype(int)
+        n = len(seq)
+        if n == 0:
+            per_seq_counts.append(np.zeros(G))
+            continue
+        c = np.bincount(seq, minlength=G).astype(float)
+        per_seq_counts.append(c)
+        counts += c
+    for seq, c in zip(X, per_seq_counts):
+        seq = np.asarray(seq).astype(int)
+        n = len(seq)
+        if n == 0:
+            continue
+        t = np.arange(n) / n
+        for k in np.flatnonzero(c):
+            share = c[k] / counts[k]
+            w = share ** -0.5 if weighting == 'inverse_sqrt' else 1.0
+            tk = t[seq == k]
+            times[k].append(tk)
+            weights[k].append(np.full(len(tk), w))
+
+    dists = [
+        (np.concatenate(times[k]), np.concatenate(weights[k]))
+        if counts[k] >= min_count and times[k] else None
+        for k in range(G)
+    ]
+    D = np.full((G, G), np.nan)
+    np.fill_diagonal(D, 0.0)
+    for a in range(G):
+        if dists[a] is None:
+            continue
+        for b in range(a + 1, G):
+            if dists[b] is None:
+                continue
+            D[a, b] = D[b, a] = _weighted_w1(*dists[a], *dists[b])
+    if np.isnan(D).any():
+        fill = np.nanmax(D) if np.isfinite(np.nanmax(D)) else 1.0
+        D = np.where(np.isnan(D), fill, D)
+        np.fill_diagonal(D, 0.0)
+    return np.ascontiguousarray(D)
+
+
+def semantic_ground_cost(centroids, categories, G, background_code=BACKGROUND_CODE):
+    """Category-level *semantic* ground cost from prototype embedding centroids.
+
+    The temporal-occurrence cost says two symbols are close if they happen at
+    similar task phases -- conflating "when" with "what". This builds the
+    complementary cost from the geometry the symbolization pipeline otherwise
+    discards: aggregate the prototype centroids of each category (mean of the
+    L2-normalized member centroids, renormalized) and take pairwise cosine
+    distances between the category vectors.
+
+    Parameters
+    ----------
+    centroids : np.ndarray of shape (K, D)
+        Prototype centroid matrix (e.g. the K-space centroids).
+    categories : array-like of int, shape (K,)
+        Category code (``0..G-1``) of each prototype; prototypes mapped to
+        ``background_code`` are ignored.
+    G : int
+        Alphabet size.
+    background_code : int
+        Background symbol code (row/col filled with the max distance, matching
+        the temporal-cost convention).
+
+    Returns
+    -------
+    np.ndarray of shape (G, G)
+        Raw symmetric cosine-distance matrix (zero diagonal); categories with no
+        prototype get the max distance. Apply :func:`compute_distance_matrix`
+        (or :func:`blend_ground_costs` + :func:`compute_distance_matrix`) for
+        the rTWE ground cost.
+    """
+    C = np.asarray(centroids, dtype=np.float64)
+    cats = np.asarray(categories).astype(int)
+    norms = np.linalg.norm(C, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    C = C / norms
+    vecs = np.full((G, C.shape[1]), np.nan)
+    for g in range(G):
+        if g == background_code:
+            continue
+        members = C[cats == g]
+        if len(members):
+            v = members.mean(axis=0)
+            n = np.linalg.norm(v)
+            vecs[g] = v / n if n > 0 else v
+    have = np.flatnonzero(np.isfinite(vecs).all(axis=1))
+    D = np.full((G, G), np.nan)
+    np.fill_diagonal(D, 0.0)
+    if len(have):
+        sub = 1.0 - vecs[have] @ vecs[have].T
+        D[np.ix_(have, have)] = np.clip(sub, 0.0, None)
+        np.fill_diagonal(D, 0.0)
+    fill = np.nanmax(D) if np.isfinite(np.nanmax(D)) else 1.0
+    D = np.where(np.isnan(D), fill, D)
+    D[background_code, :] = fill
+    D[:, background_code] = fill
+    np.fill_diagonal(D, 0.0)
+    return np.ascontiguousarray((D + D.T) / 2.0)
+
+
+def blend_ground_costs(D_a, D_b, alpha):
+    """Convex blend of two raw ground costs, each max-normalized first.
+
+    ``alpha = 1`` returns (normalized) ``D_a``, ``alpha = 0`` returns ``D_b`` --
+    e.g. ``blend_ground_costs(D_semantic, D_temporal, alpha)`` is the FGW-style
+    "what vs when" knob applied at the ground-cost level. Both inputs must share
+    the alphabet indexing; the result is raw (apply
+    :func:`compute_distance_matrix` afterwards).
+    """
+    A = np.asarray(D_a, dtype=np.float64)
+    B = np.asarray(D_b, dtype=np.float64)
+    if A.shape != B.shape:
+        raise ValueError(f"shape mismatch: {A.shape} vs {B.shape}")
+    A = A / A.max() if A.max() > 0 else A
+    B = B / B.max() if B.max() > 0 else B
+    return np.ascontiguousarray(alpha * A + (1.0 - alpha) * B)
 
 
 def make_ground_cost(D_base, delta):

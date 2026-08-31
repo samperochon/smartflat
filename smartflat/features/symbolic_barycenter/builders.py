@@ -486,14 +486,15 @@ def barycenter_majority_voting(X_symbolic):
 
 
 def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=10,
-                        random_state=None, return_costs=False):
+                        random_state=None, return_costs=False, update='mode',
+                        init='medoid', keep='best'):
     """Mode-based DBA barycenter for categorical symbolic sequences.
 
     Mean-based DBA averages nominal prototype indices (e.g. symbols 2 and 70 -> 36),
     which is meaningless for categorical data and erases the symbol-frequency signal.
     Mode-based DBA instead warps every sequence to the current reference via the rTWE
-    alignment path and takes the per-position MODE of the aligned symbols, iterating to
-    convergence. The reference is initialised to the within-group rTWE medoid.
+    alignment path and updates every reference position from the aligned symbols,
+    iterating to convergence.
 
     Parameters
     ----------
@@ -506,30 +507,60 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=
     max_iter : int
         Maximum number of mode-DBA refinement iterations.
     random_state : int or None
-        Unused; kept for a uniform ``build(X, seed)`` signature.
+        Seed for ``init='random'``; unused under the deterministic ``'medoid'`` init
+        (kept for the uniform ``build(X, seed)`` signature).
     return_costs : bool
-        If ``True``, also return the per-iteration total rTWE cost of the sequences
-        against the current reference (the DBA convergence trace). The cost is the
-        alignment distance already computed for each vote, so this adds no work.
+        If ``True``, also return the per-iterate total rTWE cost trace. Entry ``t`` is
+        the summed alignment cost of all sequences against iterate ``t`` (the cost is
+        already computed for the votes, so only the final iterate adds work).
+    update : {'mode', 'dg_frechet'}
+        Per-position update rule. ``'mode'`` (default, historical) takes the most
+        frequently aligned symbol -- a majority vote that ignores the ground cost.
+        ``'dg_frechet'`` takes the vocabulary-restricted Frechet mean under ``D_G``,
+        ``argmin_c sum_v counts[v] * D_G[c, v]^2`` -- consistent with the squared-
+        distance Frechet objective the barycenter is meant to minimize.
+    init : {'medoid', 'random'}
+        ``'medoid'`` (default) initialises from the within-group rTWE medoid,
+        deterministically. ``'random'`` picks a seeded member -- use this to make the
+        harness's ``n_inits`` random restarts genuine (under ``'medoid'`` they all
+        produce the same barycenter).
+    keep : {'best', 'last'}
+        ``'best'`` (default) returns the iterate with the lowest total rTWE cost --
+        the mode update carries no monotone-decrease guarantee, so the last iterate
+        is not necessarily the best (costing the final iterate adds one distance
+        pass). ``'last'`` returns the final iterate (the historical behaviour); when
+        the cost trace is monotone the two coincide.
 
     Returns
     -------
     np.ndarray of shape (n_timepoints,)
-        Mode-based symbolic barycenter. If ``return_costs`` is ``True``, returns
-        ``(barycenter, costs)`` where ``costs`` is a list of per-iteration total costs.
+        Symbolic barycenter. If ``return_costs`` is ``True``, returns
+        ``(barycenter, costs)``.
     """
     from collections import Counter
     from smartflat.engine.distances._rtwe import (
-        rtwe_alignment_path, rtwe_pairwise_distance,
+        rtwe_alignment_path, rtwe_distance, rtwe_pairwise_distance,
     )
+    if update not in ('mode', 'dg_frechet'):
+        raise ValueError(f"update must be 'mode' or 'dg_frechet', got {update!r}")
+    if init not in ('medoid', 'random'):
+        raise ValueError(f"init must be 'medoid' or 'random', got {init!r}")
+    if keep not in ('best', 'last'):
+        raise ValueError(f"keep must be 'best' or 'last', got {keep!r}")
     X = np.asarray(X_symbolic).astype(int)
     if len(X) == 1:
         return (X[0].copy(), []) if return_costs else X[0].copy()
     Dc = np.asarray(D_G, dtype=np.float64)
-    Xa = X.astype(np.float64)[:, None, :]
-    D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, precomputed_distances=Dc)
-    ref = X[int(np.argmin(D.sum(axis=1)))].copy()
-    costs = []
+    Dc2 = Dc ** 2
+    if init == 'random':
+        rng = np.random.default_rng(random_state)
+        ref = X[int(rng.integers(len(X)))].copy()
+    else:
+        Xa = X.astype(np.float64)[:, None, :]
+        D = rtwe_pairwise_distance(Xa, nu=nu, lmbda=lmbda, precomputed_distances=Dc)
+        ref = X[int(np.argmin(D.sum(axis=1)))].copy()
+    candidates, costs = [], []
+    converged = False
     for _ in range(max_iter):
         votes = [[] for _ in range(len(ref))]
         iter_cost = 0.0
@@ -541,16 +572,35 @@ def barycenter_mode_dba(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, max_iter=
             for (i, j) in path:
                 if 0 <= j < len(ref) and 0 <= i < len(s):
                     votes[j].append(int(s[i]))
+        candidates.append(ref)
         costs.append(iter_cost)
-        new_ref = np.array(
-            [Counter(v).most_common(1)[0][0] if v else int(ref[j])
-             for j, v in enumerate(votes)],
-            dtype=np.int64,
-        )
+        if update == 'dg_frechet':
+            new_ref = np.array(
+                [int(np.argmin(Dc2[:, v].sum(axis=1))) if v else int(ref[j])
+                 for j, v in enumerate(votes)],
+                dtype=np.int64,
+            )
+        else:
+            new_ref = np.array(
+                [Counter(v).most_common(1)[0][0] if v else int(ref[j])
+                 for j, v in enumerate(votes)],
+                dtype=np.int64,
+            )
         if np.array_equal(new_ref, ref):
+            converged = True
             break
         ref = new_ref
-    return (ref, costs) if return_costs else ref
+    if not converged and keep == 'best':
+        # max_iter exhausted without a fixed point: the final iterate was never
+        # costed -- do it with the O(L)-memory distance kernel (no paths needed).
+        candidates.append(ref)
+        costs.append(float(sum(
+            rtwe_distance(s.astype(np.float64), ref.astype(np.float64),
+                          nu=nu, lmbda=lmbda, precomputed_distances=Dc)
+            for s in X
+        )))
+    out = candidates[int(np.argmin(costs))] if keep == 'best' else ref
+    return (out, costs) if return_costs else out
 
 
 def barycenter_msa_consensus(X_symbolic, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,

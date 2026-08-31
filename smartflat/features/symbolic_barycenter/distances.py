@@ -320,10 +320,19 @@ def dist_rtwe(seq, bary, D_cost, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
     ))
 
 
-def pmatch_to_barycenter(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
+def pmatch_to_barycenter(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None,
+                         denominator='diagonal'):
     """Proportion of exactly-matching symbols along the rTWE alignment between a sequence
-    and a barycenter. This is the paper's discriminative feature; higher means closer."""
+    and a barycenter. This is the paper's discriminative feature; higher means closer.
+
+    ``denominator='diagonal'`` (default, historical) divides by the number of diagonal
+    (match) steps only; ``'all'`` divides by the total number of alignment steps
+    (matches + insertions + deletions), the definition used by the NB06 alignment-
+    proportions figure. The two differ whenever the alignment contains edit steps --
+    pick one explicitly rather than mixing them across analyses."""
     from smartflat.engine.distances._rtwe import rtwe_alignment_path
+    if denominator not in ('diagonal', 'all'):
+        raise ValueError(f"denominator must be 'diagonal' or 'all', got {denominator!r}")
     path, _ = rtwe_alignment_path(
         np.asarray(seq, dtype=np.float64), np.asarray(bary, dtype=np.float64),
         np.asarray(D_G, dtype=np.float64), window=window, nu=nu, lmbda=lmbda,
@@ -338,7 +347,42 @@ def pmatch_to_barycenter(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=No
             ntot += 1
             if s[path[k][0]] == b[path[k][1]]:
                 nmatch += 1
+        elif denominator == 'all':
+            ntot += 1
     return nmatch / max(ntot, 1)
+
+
+def pmatch_soft_to_barycenter(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
+    """Soft, ``D_G``-weighted alignment agreement: mean of ``1 - D_G[a, b] / D_G.max()``
+    over the diagonal steps of the rTWE alignment.
+
+    Unlike the hard 0/1 :func:`pmatch_to_barycenter`, a close-but-distinct symbol pair
+    earns partial credit proportional to its ground-cost proximity -- consistent with
+    the geometry the alignment itself optimises. Equals the hard p_match when ``D_G``
+    is the uniform 0/1 cost."""
+    from smartflat.engine.distances._rtwe import rtwe_alignment_path
+    D = np.asarray(D_G, dtype=np.float64)
+    dmax = D.max() if D.max() > 0 else 1.0
+    path, _ = rtwe_alignment_path(
+        np.asarray(seq, dtype=np.float64), np.asarray(bary, dtype=np.float64),
+        D, window=window, nu=nu, lmbda=lmbda,
+    )
+    s = np.asarray(seq).astype(int)
+    b = np.asarray(bary).astype(int)
+    credit = 0.0
+    ntot = 0
+    for k in range(1, len(path)):
+        di = path[k][0] - path[k - 1][0]
+        dj = path[k][1] - path[k - 1][1]
+        if di == 1 and dj == 1:
+            ntot += 1
+            credit += 1.0 - D[s[path[k][0]], b[path[k][1]]] / dmax
+    return credit / max(ntot, 1)
+
+
+def dist_neg_pmatch_soft(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
+    """Negative soft p_match, usable as a 'distance' in :func:`evaluate_baselines`."""
+    return -pmatch_soft_to_barycenter(seq, bary, D_G, nu=nu, lmbda=lmbda, window=window)
 
 
 def dist_neg_pmatch(seq, bary, D_G, nu=RTWE_NU, lmbda=RTWE_LMBDA, window=None):
